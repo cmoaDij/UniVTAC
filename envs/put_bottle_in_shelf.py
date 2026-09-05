@@ -90,5 +90,6 @@ class Task(BaseTask):
 
     def check_success(self):
         bottle_pose = self.bottle.get_pose().rebase(self.place_target)
+        self.metadata['bottle_pose'] = bottle_pose.tolist()
         return np.all(np.abs(bottle_pose.p) < np.array([0.02, 0.1, 0.02])) \
             and np.dot(bottle_pose.to_transformation_matrix()[:3, 2], np.array([0, 0, 1])) > 0.965 # 15°

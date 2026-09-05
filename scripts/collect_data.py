@@ -44,6 +44,12 @@ parser.add_argument(
     default=-1,
 )
 parser.add_argument(
+    "--seed_step",
+    type=int,
+    default=1,
+    help="Increment between attempted seeds (useful for disjoint parallel shards).",
+)
+parser.add_argument(
     "--gpu",
     type=str,
     default=None,
@@ -86,7 +92,9 @@ def log(msg):
         f.write(msg + '\n')
     print(msg)
 
-def run(task: 'BaseTask', episode_num, use_seed, start_seed, max_seed):
+def run(task: 'BaseTask', episode_num, use_seed, start_seed, max_seed, seed_step):
+    if seed_step < 1:
+        raise ValueError("seed_step must be >= 1")
     suc_num, seed = 0, 0
     suc_map = []
     
@@ -126,15 +134,16 @@ def run(task: 'BaseTask', episode_num, use_seed, start_seed, max_seed):
                     mean_steps = task.step_count
                 task.clean_cache(mean_steps=mean_steps, result='success')
             else:
+                check_success = task.check_success()
                 log(f"[{suc_num:<3d}] Seed {seed} failed in {cost_t:.2f} s.\n"
-                    f"Plan {task.plan_success}, Check {task.check_success()}")
+                    f"Plan {task.plan_success}, Check {check_success}")
                 suc_map.append('0')
                 task.clean_cache(mean_steps=mean_steps, result='fail')
         
         with open(task.save_root / 'suc_map.txt', 'w') as f:
             f.write(' '.join([s for s in suc_map]))
         
-        seed += 1
+        seed += seed_step
     
     log(f'Complete collection, success rate: {suc_num}/{seed} ({(suc_num / seed) * 100:.2f}%)')
 
@@ -170,6 +179,7 @@ def main():
         use_seed=task_config.collect_settings.use_seed,
         start_seed=args_cli.start_seed,
         max_seed=args_cli.max_seed,
+        seed_step=args_cli.seed_step,
     )
 
 if __name__ == "__main__":

@@ -25,6 +25,8 @@ SAFE_PRESS_DEPTH_LIMIT_MM = {
 
 DEFAULT_ARM_STIFFNESS = 1_250_000.0
 DEFAULT_ARM_DAMPING = 2_500.0
+COLLECT_ARM_STIFFNESS = 80.0
+COLLECT_ARM_DAMPING = 4.0
 
 
 def _apply_franka_arm_pd(
@@ -47,10 +49,32 @@ def _apply_franka_arm_pd(
     return robot
 
 
+def _resolve_arm_pd(
+    mode: Literal["collect", "eval"],
+    stiffness: float | None,
+    damping: float | None,
+) -> tuple[float, float]:
+    """Resolve controller gains at the robot-config layer.
+
+    Collection defaults to a compliant controller, while replay/evaluation
+    uses the benchmark's high-gain controller. Explicit values remain
+    available for callers that need a controlled experiment.
+    """
+    if mode not in ("collect", "eval"):
+        raise ValueError(f"Unsupported robot mode {mode!r}.")
+    if stiffness is None:
+        stiffness = COLLECT_ARM_STIFFNESS if mode == "collect" else DEFAULT_ARM_STIFFNESS
+    if damping is None:
+        damping = COLLECT_ARM_DAMPING if mode == "collect" else DEFAULT_ARM_DAMPING
+    return float(stiffness), float(damping)
+
+
 @configclass
 class RobotCfg:
     robot: ArticulationCfg = None
     tactiles: list[TactileCfg] = []
+    arm_stiffness: float = DEFAULT_ARM_STIFFNESS
+    arm_damping: float = DEFAULT_ARM_DAMPING
 
     gripper_offset: float = 0.131 # in m
     gripper_max_qpos: float = 0.039 # in m
@@ -64,9 +88,11 @@ def create_franka_gsmini_gripper(
     data_type: list[str],
     optical_backend: Literal["taxim", "pix2pix"] = "taxim",
     update_period: float = 1 / 120,
-    arm_stiffness: float = DEFAULT_ARM_STIFFNESS,
-    arm_damping: float = DEFAULT_ARM_DAMPING,
+    mode: Literal["collect", "eval"] = "eval",
+    arm_stiffness: float | None = None,
+    arm_damping: float | None = None,
 ):
+    arm_stiffness, arm_damping = _resolve_arm_pd(mode, arm_stiffness, arm_damping)
     robot = FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_HIGH_RES_UIPC_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
@@ -108,6 +134,8 @@ def create_franka_gsmini_gripper(
     return RobotCfg(
         robot=robot,
         tactiles=tactiles,
+        arm_stiffness=arm_stiffness,
+        arm_damping=arm_damping,
         gripper_offset=0.131,
         gripper_max_qpos=0.039,
         tactile_far_plane=34.0,
@@ -119,9 +147,11 @@ def create_franka_gsmini_gripper(
 def create_franka_gf225_gripper(
     data_type: list[str],
     update_period: float = 1 / 120,
-    arm_stiffness: float = DEFAULT_ARM_STIFFNESS,
-    arm_damping: float = DEFAULT_ARM_DAMPING,
+    mode: Literal["collect", "eval"] = "eval",
+    arm_stiffness: float | None = None,
+    arm_damping: float | None = None,
 ):
+    arm_stiffness, arm_damping = _resolve_arm_pd(mode, arm_stiffness, arm_damping)
     robot = FRANKA_PANDA_ARM_GF225_GRIPPER_HIGH_PD_HIGH_RES_UIPC_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
@@ -161,6 +191,8 @@ def create_franka_gf225_gripper(
     return RobotCfg(
         robot=robot,
         tactiles=tactiles,
+        arm_stiffness=arm_stiffness,
+        arm_damping=arm_damping,
         gripper_offset=0.131,
         gripper_max_qpos=0.039,
         tactile_far_plane=29.0,
@@ -172,9 +204,11 @@ def create_franka_gf225_gripper(
 def create_franka_xensews_gripper(
     data_type: list[str],
     update_period: float = 1 / 120,
-    arm_stiffness: float = DEFAULT_ARM_STIFFNESS,
-    arm_damping: float = DEFAULT_ARM_DAMPING,
+    mode: Literal["collect", "eval"] = "eval",
+    arm_stiffness: float | None = None,
+    arm_damping: float | None = None,
 ):
+    arm_stiffness, arm_damping = _resolve_arm_pd(mode, arm_stiffness, arm_damping)
     robot = FRANKA_PANDA_ARM_XENSEWS_GRIPPER_HIGH_PD_HIGH_RES_UIPC_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
@@ -214,6 +248,8 @@ def create_franka_xensews_gripper(
     return RobotCfg(
         robot=robot,
         tactiles=tactiles,
+        arm_stiffness=arm_stiffness,
+        arm_damping=arm_damping,
         gripper_offset=0.125,
         gripper_max_qpos=0.039,
         tactile_far_plane=30.0,

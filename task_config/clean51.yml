@@ -14,12 +14,12 @@ env_settings:
 collect_settings:
   save_root_dir: data
   use_seed: true
-  episode_num: 10
+  episode_num: 110
 
 replay_settings:
   save_root_dir: eval_result
   force_action: false
-  max_episodes: 10
+  max_episodes: 110
 
 observation_settings:
   camera: ['rgb']
@@ -27,7 +27,4 @@ observation_settings:
   embodiment: ['joint', 'ee']
   actor: true
 
-task_overrides:
-  reset_time_limit: 600
-  planner_use_cuda_graph: false
-  planner_interpolation_steps: 2000
+task_overrides: {}

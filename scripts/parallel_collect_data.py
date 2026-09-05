@@ -38,7 +38,7 @@ def split_devices(cuda_visible_devices: str, workers: int):
 
 def worker_run(task_config, task_file_name, config_name, base_save_dir: Path, seed_q: Queue,
                progress, stop_event: Event, log_file: Path, device_list,
-               status_dict, result_q: Queue):
+               status_dict, result_q: Queue, metadata_lock):
     # Per-process env: assign CUDA devices
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(device_list) if device_list else ''
 
@@ -55,8 +55,8 @@ def worker_run(task_config, task_file_name, config_name, base_save_dir: Path, se
     app_args = parser.parse_args([])
     app_args.enable_cameras = True
     app_args.num_envs = 1
-    if timing_plan(task_config, "collect").render_hz == 0:
-        app_args.livestream = 2
+    app_args.headless = True
+    app_args.livestream = 0
 
     app_launcher = AppLauncher(app_args)
     simulation_app = app_launcher.app
@@ -73,6 +73,14 @@ def worker_run(task_config, task_file_name, config_name, base_save_dir: Path, se
             save_dir=base_save_dir,
         )
         task: 'BaseTask' = task_env.task
+
+        # Every worker for a task shares the same metadata.json.  Serialize the
+        # read-modify-write operation so concurrent workers cannot lose entries.
+        original_save_metadata = task._save_metadata
+        def locked_save_metadata():
+            with metadata_lock:
+                return original_save_metadata()
+        task._save_metadata = locked_save_metadata
 
         # Override _step_callback to update status_dict
         original_step_callback = task._step_callback
@@ -151,7 +159,7 @@ def worker_run(task_config, task_file_name, config_name, base_save_dir: Path, se
                 status_dict['current_seed'] = None
                 status_dict['state'] = 'idle'
                 mean_steps = ((progress['succ'] - 1) * mean_steps + task.step_count) / progress['succ'] if progress['succ'] > 1 else task.step_count
-                task.clean_cache(mean_steps=mean_steps)
+                task.clean_cache(mean_steps=mean_steps, result='success')
                 print(f"[Worker {worker_id}] Seed {seed} success in {cost_t:.2f}s; steps {task.step_count}, save frames {task.save_count}")
                 result_q.put({
                     'worker': worker_id,
@@ -165,6 +173,7 @@ def worker_run(task_config, task_file_name, config_name, base_save_dir: Path, se
                     'traceback': None,
                 })
             else:
+                check_success = task.check_success()
                 progress['attempts'] += 1
                 status_dict['attempts'] += 1
                 status_dict['last_result'] = 'fail'
@@ -174,7 +183,7 @@ def worker_run(task_config, task_file_name, config_name, base_save_dir: Path, se
                 status_dict['current_seed'] = None
                 status_dict['state'] = 'idle'
                 task.clean_cache(mean_steps=mean_steps, result='fail')
-                print(f"[Worker {worker_id}] Seed {seed} fail in {cost_t:.2f}s; plan {task.plan_success}, check {task.check_success()}")
+                print(f"[Worker {worker_id}] Seed {seed} fail in {cost_t:.2f}s; plan {task.plan_success}, check {check_success}")
                 result_q.put({
                     'worker': worker_id,
                     'seed': seed,
@@ -183,7 +192,7 @@ def worker_run(task_config, task_file_name, config_name, base_save_dir: Path, se
                     'steps': task.step_count,
                     'save_count': task.save_count,
                     'plan_success': task.plan_success,
-                    'check_success': task.check_success(),
+                    'check_success': check_success,
                     'traceback': None,
                 })
         try:
@@ -226,11 +235,33 @@ def main():
     out_log.touch()
     clean_log.touch()
 
+    existing_hdf5 = sorted((base_save_dir / 'hdf5').glob('*.hdf5'))
+    existing_seeds = {int(path.stem) for path in existing_hdf5}
+    metadata_path = base_save_dir / 'metadata.json'
+    if metadata_path.is_file():
+        try:
+            existing_seeds.update(int(seed) for seed in json.loads(metadata_path.read_text()))
+        except (OSError, ValueError, json.JSONDecodeError):
+            raise RuntimeError(f"Cannot safely resume from invalid metadata: {metadata_path}")
+    existing_successes = len(existing_hdf5)
+    if existing_successes >= target_episodes:
+        print(
+            f"[Final] {existing_successes}/{target_episodes} successful episodes "
+            f"already exist in {base_save_dir}; nothing to collect."
+        )
+        return
+
     manager = Manager()
     seed_q = Queue()
-    progress = manager.dict(done=0, succ=0, errors=0, attempts=0)
+    progress = manager.dict(
+        done=existing_successes,
+        succ=existing_successes,
+        errors=0,
+        attempts=0,
+    )
     stop_event = Event()
     result_q = Queue()
+    metadata_lock = manager.Lock()
 
     def write_out(msg: str):
         with open(out_log, 'a') as f:
@@ -241,7 +272,7 @@ def main():
         with open(clean_log, 'a') as f:
             f.write(stamped + '\n')
 
-    next_seed = 0
+    next_seed = max(existing_seeds, default=-1) + 1
 
     assignments = split_devices(args.gpu, args.workers)
 
@@ -252,6 +283,8 @@ def main():
         'task': args.task,
         'config_file': str(task_config_file),
         'target_episodes': target_episodes,
+        'existing_successes': existing_successes,
+        'next_seed': next_seed,
         'workers': args.workers,
         'cuda_assignments': assignments,
         'save_dir': str(base_save_dir),
@@ -272,7 +305,7 @@ def main():
         p = Process(
             target=worker_run,
             name=f"Worker-{w+1}",
-            args=(task_config, args.task, task_config_file.stem, base_save_dir, seed_q, progress, stop_event, out_log, assignments[w], status_proxy, result_q)
+            args=(task_config, args.task, task_config_file.stem, base_save_dir, seed_q, progress, stop_event, out_log, assignments[w], status_proxy, result_q, metadata_lock)
         )
         p.start()
         workers.append(p)
@@ -284,10 +317,14 @@ def main():
         last_update = 0
         last_render = 0
         last_block = ""
-        for _ in range(args.workers):
+        initial_jobs = min(args.workers, target_episodes - existing_successes)
+        for _ in range(initial_jobs):
             seed_q.put(next_seed)
             next_seed += 1
+        for _ in range(args.workers - initial_jobs):
+            seed_q.put(None)
 
+        shutdown_sent = False
         while any(p.is_alive() for p in workers):
             # Drain results queue and log clean summaries
             while True:
@@ -305,14 +342,17 @@ def main():
                         write_clean(f"{prefix} error; see out.log for traceback")
                     write_out(f"{prefix} result={event['result']} cost={event['cost']} steps={event['steps']} saves={event['save_count']} plan={event['plan_success']} check={event['check_success']}")
 
-                    if done < target_episodes:
-                        for _ in range(args.workers):
-                            seed_q.put(next_seed)
-                            next_seed += 1
-                    else:
+                    done = progress.get('done', 0)
+                    if done < target_episodes and not stop_event.is_set():
+                        # Replace exactly the completed attempt.  Enqueuing one
+                        # job per worker here makes the queue grow without bound.
+                        seed_q.put(next_seed)
+                        next_seed += 1
+                    elif not shutdown_sent:
                         for _ in range(args.workers):
                             seed_q.put(None)
                         stop_event.set()
+                        shutdown_sent = True
 
             done = progress.get('done', 0)
             pbar.n = done

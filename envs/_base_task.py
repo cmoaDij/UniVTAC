@@ -185,10 +185,10 @@ class BaseTaskCfg(DirectRLEnvCfg):
     camera_names: list[str] | None = None
     """Names of scene cameras to initialize; ``None`` keeps every task camera."""
     robot: RobotCfg = None
-    arm_stiffness: float = DEFAULT_ARM_STIFFNESS
-    """Shoulder/forearm implicit-PD stiffness used for position control."""
-    arm_damping: float = DEFAULT_ARM_DAMPING
-    """Shoulder/forearm implicit-PD damping used for position control."""
+    arm_stiffness: float | None = None
+    """Optional arm stiffness; robot config supplies mode-specific default."""
+    arm_damping: float | None = None
+    """Optional arm damping; robot config supplies mode-specific default."""
     tactile_sensor_type:Literal['gsmini', 'xensews', 'gf225'] = 'gsmini'
     tactile_optical_backend: Literal["taxim", "pix2pix"] = "taxim"
     """GelSight optical backend selected once when the environment starts."""
@@ -220,7 +220,7 @@ class BaseTask(UipcRLEnv):
     cfg: BaseTaskCfg
 
     def __init__(self, cfg: BaseTaskCfg, mode:Literal['collect', 'eval'] = 'collect', render_mode=None, **kwargs):
-        cfg = self.load_robot_and_sensors(cfg)
+        cfg = self.load_robot_and_sensors(cfg, mode=mode)
         
         self.cfg = cfg
         self.render_outdated = True
@@ -270,7 +270,9 @@ class BaseTask(UipcRLEnv):
         self._tactile_manager.set_debug_vis(self.cfg.debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
     
-    def load_robot_and_sensors(self, cfg:BaseTaskCfg):
+    def load_robot_and_sensors(
+        self, cfg: BaseTaskCfg, mode: Literal['collect', 'eval'] = 'eval'
+    ):
         if cfg.camera_names is not None:
             requested_camera_names = list(cfg.camera_names)
             if len(requested_camera_names) != len(set(requested_camera_names)):
@@ -297,6 +299,7 @@ class BaseTask(UipcRLEnv):
                 data_type=data_type,
                 optical_backend=cfg.tactile_optical_backend,
                 update_period=cfg.sim.dt,
+                mode=mode,
                 arm_stiffness=cfg.arm_stiffness,
                 arm_damping=cfg.arm_damping,
             )
@@ -304,6 +307,7 @@ class BaseTask(UipcRLEnv):
             cfg.robot = create_franka_gf225_gripper(
                 data_type=data_type,
                 update_period=cfg.sim.dt,
+                mode=mode,
                 arm_stiffness=cfg.arm_stiffness,
                 arm_damping=cfg.arm_damping,
             )
@@ -311,11 +315,16 @@ class BaseTask(UipcRLEnv):
             cfg.robot = create_franka_xensews_gripper(
                 data_type=data_type,
                 update_period=cfg.sim.dt,
+                mode=mode,
                 arm_stiffness=cfg.arm_stiffness,
                 arm_damping=cfg.arm_damping,
             )
         else:
             raise ValueError(f'Unknown tactile sensor type: {cfg.tactile_sensor_type}')
+
+        # Keep the resolved values visible in the task config and logs.
+        cfg.arm_stiffness = cfg.robot.arm_stiffness
+        cfg.arm_damping = cfg.robot.arm_damping
         
         if cfg.adaptive_grasp_depth_threshold is None:
             cfg.adaptive_grasp_depth_threshold = cfg.robot.adaptive_grasp_depth_threshold
