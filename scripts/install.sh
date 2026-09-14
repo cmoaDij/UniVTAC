@@ -119,7 +119,7 @@ if [[ ! -x "${CUDA_ROOT}/bin/nvcc" ]]; then
     echo "Run the TacEx Conda environment update or set UNIVTAC_CUDA_HOME." >&2
     exit 1
 fi
-if ! "${CUDA_ROOT}/bin/nvcc" --version | tail -n 1 | grep -q "release 12\.6"; then
+if ! "${CUDA_ROOT}/bin/nvcc" --version | grep -q "release 12\.6"; then
     echo "UniVTAC must use CUDA 12.6; ${CUDA_ROOT} is a different toolkit." >&2
     exit 1
 fi
@@ -179,7 +179,7 @@ for package, wanted in expected.items():
         print(f"[missing] {package}")
         failed = True
         continue
-    ok = installed == wanted
+    ok = installed == wanted or (package == "torch" and installed == wanted + "+cu126")
     print(f"[{'ok' if ok else 'wrong'}] {package}=={installed}")
     failed |= not ok
 

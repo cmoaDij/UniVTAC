@@ -5,7 +5,7 @@ import os
 VCPKG_TAG = '2025.7.25'
 VCPKG_BASE_LINE = 'dd3097e305afa53f7b4312371f62058d2e665320'
 
-SPIRI_VCPKG_BASE_LINE = '7a5a8167ff2159564076a3e0f4b025695e9df91e'
+SPIRI_VCPKG_BASE_LINE = '0299d9a583422423ea72cf425f185a99300c742a'
 
 # vcpkg.json
 base_vcpkg_json = {
@@ -90,12 +90,12 @@ base_vcpkg_configuration = {
     'default-registry': {
         'kind': 'git',
         'baseline': VCPKG_BASE_LINE,
-        'repository': 'https://github.com/microsoft/vcpkg'
+        'repository': '/data/ZED/UniVTAC/.cache/toolchains/vcpkg'
     },
     'registries': [
         {
             'kind': 'git',
-            'repository': 'https://github.com/spiriMirror/vcpkg',
+            'repository': '/data/ZED/vcpkg-spiri',
             'reference': 'master',
             'baseline': SPIRI_VCPKG_BASE_LINE,
             'packages': [

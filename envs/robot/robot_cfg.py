@@ -60,7 +60,7 @@ def _resolve_arm_pd(
     uses the benchmark's high-gain controller. Explicit values remain
     available for callers that need a controlled experiment.
     """
-    if mode not in ("collect", "eval"):
+    if mode not in ("collect", "eval", "eval_test"):
         raise ValueError(f"Unsupported robot mode {mode!r}.")
     if stiffness is None:
         stiffness = COLLECT_ARM_STIFFNESS if mode == "collect" else DEFAULT_ARM_STIFFNESS
