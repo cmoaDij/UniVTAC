@@ -53,3 +53,27 @@ Use the configured UniVTAC environment from the repository root. The immutable
 `protocol.json`, live `status.json`, subprocess logs, checks, HDF5 episodes and
 weight/source hashes remain local under `evotac/runs` and `evotac/datasets`.
 Do not start a second simulation on the selected GPU. Existing jobs are preserved.
+
+## Completed cohort: 2026-09-23
+
+Run `p4_four_arm_dev_20260923` completed all 40 prespecified attempts with no
+invalid trials or replacements, using commit `b3af68d`. Baseline A, baseline B,
+and warmstart each succeeded on 5/10 parents; trained recovery succeeded on
+2/10. Trained recovery triggered on seven parents and none succeeded. Its two
+successes used no recovery action. Warmstart triggered on seven parents and
+three succeeded; that conditional comparison does not isolate action efficacy
+because trajectories and trigger times can differ.
+
+Trained minus baseline A and trained minus warmstart each have a descriptive
+paired difference of -0.30, parent-bootstrap interval [-0.60, 0.00], and exact
+two-sided McNemar p=0.25. There is no evidence supporting promotion as a positive
+improvement; this small dev cohort also does not establish a negative population
+effect or invalidate the complete proposed method. A/A success labels agree on
+all ten parents, but initial end-effector positions differ by up to 6.73 mm and
+one parent's terminal reason differs. The all-zero A/A bootstrap interval must
+not be interpreted as proof of zero population variability.
+
+The [validation report](EvoTac_Validation_20260922.html#dev-comparison) includes
+the per-parent plot, terminal reasons, trigger timing, limitations and links to
+local data/weight audits. All checkpoints are preserved. Independent test has
+not started, and this is not a full P5 candidate-acceptance experiment.

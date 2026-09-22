@@ -7,13 +7,14 @@ section{background:#fff;border:1px solid #d8e0e7;border-radius:10px;padding:18px
 table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px solid #e1e6eb;text-align:left;vertical-align:top}code{background:#eef2f5;padding:2px 5px;border-radius:4px}.ok{color:#16733b}.warn{color:#9a5b00}.bad{color:#a12622}.muted{color:#5b6872}.banner{border-left:4px solid #a12622;background:#fff0ef;padding:10px 14px}
 </style></head><body>
 <h1>EvoTac 当前验证报告</h1>
-<p class="muted">更新时间：2026-09-23 01:10 CST · 分支：<code>isaac51</code> · 原始运行的源码哈希保存在各自 manifest 中</p>
-<section><h2>当前结论</h2><div class="banner"><strong>严格共享状态/连续 rollout 快照审计失败；test 被门禁阻断，不能宣称 EvoTac 的因果收益。</strong> 训练 plumbing 已完成，策略效果仍未得到公平、可归因的证据。</div>
+<p class="muted">更新时间：2026-09-23 03:57 CST · 分支：<code>isaac51</code> · 原始运行的源码哈希保存在各自 manifest 中</p>
+<section><h2>当前结论</h2><div class="banner"><strong>已完成 40 次真实完整 dev 任务：训练后恢复策略成功 2/10，两组基线及训练前恢复策略均为 5/10，当前没有验证出正向收益。</strong> 训练后策略触发恢复的 7 次任务全部失败，两次成功均未触发恢复。小样本不能证明总体效果退化，也不能证明完整 EvoTac 无效。严格快照审计仍失败，正式 test 未启动。</div>
 <table><tr><th>层级</th><th>结果</th><th>证据</th></tr>
-<tr><td>软件测试</td><td class="ok">通过：104 passed</td><td><code>PYTHONPATH=. /data/ZED/conda/envs/UniVTAC/bin/python -m pytest -q evotac/tests</code></td></tr>
+<tr><td>软件测试</td><td class="ok">通过：107 passed</td><td><code>PYTHONPATH=. /data/ZED/conda/envs/UniVTAC/bin/python -m pytest -q evotac/tests</code></td></tr>
 <tr><td>训练 plumbing</td><td class="ok">通过：159 train parent，641 条真实恢复转移，626 次 SAC 更新</td><td><a href="../runs/phase1/p4_validation_resume_20260922_recovered/training_evidence_audit.json">training_evidence_audit.json</a>：checkpoint/replay/action 对应审计通过</td></tr>
-<tr><td>dev 校准</td><td class="warn">已完成，小样本且未证明效果</td><td>baseline 1/3；候选成功数分别为 0/3、1/3、1/3、1/3、0/3；预设规则选阈值 0.3、恢复上限 12</td></tr>
-<tr><td>策略效果</td><td class="warn">未证实</td><td>dev 只有 3 个 seed，候选没有超过 baseline 的明确优势；不能外推到 test</td></tr>
+<tr><td>历史 dev 校准</td><td class="warn">3 个 seed，未证明效果</td><td>baseline 1/3；候选成功数分别为 0/3、1/3、1/3、1/3、0/3；预设规则选阈值 0.3、恢复上限 12；随后冻结用于新对照</td></tr>
+<tr><td>当前策略效果</td><td class="bad">未证实；观察结果低于基线</td><td><a href="#dev-comparison">10 个 dev parent × 4 组</a>，40/40 有效；训练后 20%，基线 A/B 和训练前均 50%；主比较差 −30 个百分点，精确 McNemar p=0.25，不能作确认性统计结论</td></tr>
+<tr><td>完整自进化</td><td class="warn">尚未物理验证</td><td>本轮只测单恢复技能的 SAC 更新前后；效果预测、技能记忆/选择和持续自进化尚未接入本轮真实闭环，不以 SAC 更新次数代替自进化有效性</td></tr>
 <tr><td>严格因果快照审计</td><td class="bad">失败，仍阻断 test</td><td>原始 <a href="../runs/phase1/p4_validation_resume_20260922_recovered_snapshot_dev23/checks.json">snapshot_dev23/checks.json</a> 与修复后 <a href="../runs/phase1/p4_snapshot_rng_fix_full_dev23/checks.json">snapshot_rng_fix_full_dev23/checks.json</a> 都不能证明严格可见观测和隐藏状态一致；修复后 state_match=true，但相机/触觉图像仍有差异，经验渲染范围只作诊断，不能放宽门禁</td></tr>
 <tr><td>独立 test</td><td class="bad">未运行（门禁阻断）</td><td>流水线 <code>status=blocked_snapshot_audit</code>，<code>test_status=not_started_pending_causal_gate</code></td></tr>
 </table></section>
@@ -31,7 +32,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px so
 <tr><td>head / wrist RGB</td><td>最大差 72/83</td><td>相机观测仍未通过逐像素一致性</td></tr>
 <tr><td>严格门禁</td><td class="bad">paired_valid=false；test 未启动</td><td>单控制步 A/B 分支故意不完整，不计入成功率；隐藏状态等价性尚未认证</td></tr></table>
 <p><a href="../runs/phase1/p4_snapshot_aligned_source_dev23_20260923/optical_recompute.json">离线 CPU 光学重算</a>使用真实落盘的高度图和压入量：同一输入重复输出完全相同；仅微小高度差的输入可产生 13–24 灰度级的 RGB 差异。结合 Taxim 梯度离散查表代码，这支持光学映射放大数值差异的解释。CPU 与真实 GPU 输出仍有差异，故该结果仅用于原因定位，不是新的 Isaac rollout，也不是策略效果证据。此前将残差归结为右侧缓存问题、或认为 marker RNG 修复已彻底消除触觉差异，都超出了当时证据。</p>
-<p>下一步应在 dev 上量化这些观测扰动对冻结策略动作和完整轨迹的影响，并检验更长时间的状态恢复。当前不能用本轮最大差拟合宽松容差放行。证明总体成功率提升不必要求每个像素完全相同，但必须先明确并冻结公平的统计评估协议；现有严格门禁与 test 阻断保持不变。</p>
+<p>随后已完成下文的冻结策略动作敏感性诊断及独立完整 dev 任务对照；更长时间的状态恢复等价性仍未认证。当前不能用本轮最大差拟合宽松容差放行。证明总体成功率提升不必要求每个像素完全相同，但必须先明确并冻结公平的统计评估协议；现有严格门禁与 test 阻断保持不变。</p>
 </section>
 <section><h2>冻结策略的观测敏感性（2026-09-23）</h2>
 <p>已完成 <code>p4_snapshot_policy_sensitivity_dev23_20260923_r1</code>：读取上述 dev seed 23 的源/恢复候选分支，共 5 个同刻边界；每个边界运行源、源重复、完整恢复观测，以及仅替换相机、触觉、本体状态的 6 个版本，共 30 次 FTP-1 与 30 次 SAC 推理。FTP-1 每次重置相同随机种子 23，SAC 使用确定性动作和全新掩码历史；沿用冻结权重。没有启动 Isaac，没有执行这些动作，也没有训练或运行 test。</p>
@@ -42,10 +43,29 @@ table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px so
 <tr><td>仅触觉替换</td><td>2.33412e-4</td><td>4.16767e-7</td><td>1.00793e-3 / 7.28801e-4 / 9.25109e-4</td></tr>
 <tr><td>仅本体状态替换</td><td>1.30177e-4</td><td>2.32365e-7</td><td>3.42727e-7 / 2.38419e-7 / 2.08616e-7</td></tr></table>
 <p>统计覆盖 5 个边界及每次解码的 16 步 FTP-1 动作。完整恢复观测的关节差约 0.0247°；按控制器比例换算，SAC 请求平移差最大约 0.886 μm、旋转差约 8.24e-6 rad、夹爪差约 0.172 μm，均为 IK/限幅前的请求差，不是实测运动误差。所有版本的未校准风险代理约 0.171，低于已选触发阈值 0.3，且 stable 均为 true；该片段未覆盖临界触发状态。</p>
-<p><strong>结论：残余观测扰动确实改变动作，本短片段的变化量已被量化；没有完整闭环轨迹或成功率证据。</strong> 模态效应非线性，不能相加解释贡献；仅一个 dev seed、一个恢复分支，不能证明普遍鲁棒性、隐藏状态等价或自进化有效性。严格审计仍失败，不使用这些最大值事后放宽门禁。下一步需在 dev 上检查完整闭环 A/A 重复波动及 A/B 差异，并预先冻结统计评估协议；正式 test 仍阻断。</p>
+<p><strong>该离线诊断的结论：残余观测扰动确实改变动作，本短片段的变化量已被量化；它本身不提供完整闭环轨迹或成功率证据。</strong> 模态效应非线性，不能相加解释贡献；仅一个 dev seed、一个恢复分支，不能证明普遍鲁棒性、隐藏状态等价或自进化有效性。严格审计仍失败，不使用这些最大值事后放宽门禁。后续按预先冻结协议完成了下文的独立完整 dev A/A 与 A/B 对照；正式 test 仍阻断。</p>
 <p><a href="Snapshot_Policy_Sensitivity.md">复现步骤和诊断语义</a> · <a href="../runs/phase1/p4_snapshot_policy_sensitivity_dev23_20260923_r1/report.json">逐边界结果/输入与源码哈希</a> · <a href="../runs/phase1/p4_snapshot_policy_sensitivity_dev23_20260923_r1/review.json">汇总与 66 个证据文件哈希</a>。首次尝试因新脚本输出路径解析失败，未启动模型 worker；失败记录保留，修复后使用新运行目录完成。</p>
 </section>
 <section><h2>历史快照审计失败证据</h2><p>旧完整诊断 <code>p4_snapshot_rng_fix_full_dev23</code> 原文件仍保留 <code>paired_valid=true</code>，这是此前放宽门禁导致的误判，按当前门禁重算为 false；原文件不回写。原始 dev seed 23 的 head RGB 最大绝对差 16、wrist RGB 最大绝对差 143，right tactile RGB/rgb_marker 最大绝对差 17；修复后仍存在 RTX 相机和触觉光学输出差异。<code>test_status=not_started_pending_causal_gate</code>，因此共享状态不能作为因果反事实依据，恢复分支结果不能归因于 EvoTac。</p></section>
+<section id="dev-comparison"><h2>已完成：四组完整 dev 任务对照</h2>
+<p><code>p4_four_arm_dev_20260923</code> 按预先冻结协议完成 40/40 次任务，全部有效，无重跑、替换或提前停止，总耗时约 2.58 小时。10 个既有 dev parents，每个场景分别运行基线 A、基线 B、训练前恢复策略、训练后恢复策略；每次独立启动 Isaac/TacEx，串行使用 GPU9。固定 taxim、headless_profile、阈值 0.3、恢复上限 12、1200 个任务物理步、checkpoint 和场景列表，使用固定打乱/轮换顺序。源码提交 <code>b3af68d</code>；没有恢复共享快照，不将旧 livestream 或三场景校准结果混入分母。</p>
+<table><tr><th>组别</th><th>成功 / 有效任务</th><th>物体丢失 / 预算耗尽</th><th>触发恢复的任务</th><th>恢复动作总数</th></tr>
+<tr><td>FTP-1 基线 A</td><td>5/10（50%）</td><td>2 / 3</td><td>0</td><td>0</td></tr>
+<tr><td>FTP-1 基线 B</td><td>5/10（50%）</td><td>3 / 2</td><td>0</td><td>0</td></tr>
+<tr><td>训练前恢复策略</td><td>5/10（50%）</td><td>2 / 3</td><td>7（其中 3 次成功）</td><td>30</td></tr>
+<tr><td>训练后恢复策略</td><td class="bad">2/10（20%）</td><td>5 / 3</td><td>7（其中 0 次成功）</td><td>23</td></tr></table>
+<p>训练后相对基线 A：0 个独有成功、3 个独有失败（seed 39、59、86），配对成功率差 −0.30；相对训练前：0 个独有成功、3 个独有失败（seed 0、39、86）。两项比较的描述性 parent bootstrap 95% 区间均为 [−0.60, 0.00]，精确双侧 McNemar p=0.25。该 dev 样本不足以证明总体负向因果效果，不能据此断言完整方法无效；但数据显然不支持当前 checkpoint 的正向收益。</p>
+<p>基线 A/B 的 10 个成功/失败标签一致，但 seed 23 的失败原因不同；初始末端位置最大差约 6.73 mm、关节最大差约 0.0728 rad。seed 0 的训练前组成功却没有执行任何恢复动作，而两组基线超时，提示独立运行差异仍影响结局，不能把每个组间差异直接归因于恢复。A/A 的描述性 bootstrap [0,0] 也不代表总体不存在随机波动。</p>
+<p><a href="../runs/phase1/p4_four_arm_dev_20260923/outcomes.png"><img src="../runs/phase1/p4_four_arm_dev_20260923/outcomes.png" alt="10 个 dev 场景四组完整任务结果及恢复动作数" style="width:100%;height:auto"></a></p>
+<h3>失败线索与当前决策</h3><ul>
+<li>触发覆盖和时机存在问题：seed 18 四组均超时，恢复组未触发；seed 0 的训练后组仅剩 18 个物理步（3 个控制步）才触发，随后在恢复中丢失物体。</li>
+<li>seed 59 成功基线的最高图像风险代理为 0.299802，略低于阈值 0.3；训练后失败运行在 0.302156 触发，当时仅剩 168 个物理步。这提示阈值附近敏感性，需要另行验证，尚不能认定为唯一失败原因。</li>
+<li>seed 39/86 的训练前恢复成功、训练后恢复失败。训练后组 seed 86 在 3 个“稳定”恢复动作后交接，又执行 23 个基策略动作才丢失物体；图像稳定不等于恢复任务完成。SAC 政策质量、交接条件和基策略续接均需检查。</li>
+<li>训练只有 27/641 条正奖励转移（4.21%），稀疏反馈或遗忘是候选解释，尚未通过消融证明。不能仅凭 626 次更新把该版本称为有效进化。</li>
+</ul>
+<p><strong>开发决策：不将当前训练后 checkpoint 作为已验证改进推进到正式 test。</strong> 原 checkpoint 和全部证据保留；下一轮应先在 train 内处理稀疏奖励/示范保持，在 dev 单独验证触发预算和交接，再冻结新的候选评估协议。不能持续调参直到出现有利 dev 数字后宣称成功。本轮不是完整 P5 适应接纳实验，也不解除严格快照审计门禁。</p>
+<p>运行数据和评估权重审计通过：40 次记录的文件哈希、dev 划分、四组模式、阈值/预算、零训练更新、权重不变和运行版本均已核验。该审计与仍失败的严格快照审计不同。<a href="../runs/phase1/p4_four_arm_dev_20260923/status.json">完整结果</a> · <a href="../runs/phase1/p4_four_arm_dev_20260923/audit.json">数据/权重审计</a> · <a href="../runs/phase1/p4_four_arm_dev_20260923/candidate_decision.json">不推进候选的记录</a> · <a href="../runs/phase1/p4_four_arm_dev_20260923/baseline59_trigger_diagnostic.json">seed 59 风险曲线</a> · <a href="Recovery_Dev_Comparison.md">评估协议</a> · <a href="../runs/phase1/p4_four_arm_dev_20260923/protocol.json">运行前冻结文件</a> · <a href="../runs/phase1/software_tests_dev_comparison_20260923.log">107 项软件测试日志</a>。</p>
+</section>
 <section><h2>实时证据文件</h2><ul>
 <li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/status.json">恢复流水线 status.json</a></li>
 <li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/training_evidence_audit.json">训练证据审计</a></li>
@@ -53,7 +73,8 @@ table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px so
 <li><a href="../runs/phase1/p4_validation_resume_20260922_recovered_snapshot_dev23/checks.json">原始严格快照审计 checks</a></li>
 <li><a href="../runs/phase1/p4_snapshot_rng_fix_full_dev23/checks.json">修复后 dev23 审计 checks</a></li>
 <li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/software_tests_sensor_diag_final_20260923.log">100 项软件测试日志</a></li>
-<li><a href="../runs/phase1/software_tests_policy_sensitivity_20260923.log">最新 104 项软件测试日志</a></li>
+<li><a href="../runs/phase1/software_tests_policy_sensitivity_20260923.log">104 项策略敏感性软件测试日志</a></li>
+<li><a href="../runs/phase1/software_tests_dev_comparison_20260923.log">最新 107 项软件测试日志</a></li>
 <li><a href="../runs/phase1/p4_snapshot_aligned_source_dev23_20260923/checks.json">同刻源轨迹/恢复轨迹诊断 checks</a></li>
 </ul><p class="muted">runs、datasets、checkpoint 和日志均为本机证据，不提交到 Git。</p></section>
 </body></html>
