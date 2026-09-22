@@ -13,7 +13,7 @@ import yaml
 from evotac.config import ROOT
 from evotac.data.rollout_logger import write_tree
 from evotac.data.schemas import Action, json_value
-from evotac.evaluation.snapshot_audit import observation_audit
+from evotac.evaluation.snapshot_audit import continuation_audit, observation_audit, strict_paired_valid
 from evotac.learning.recovery_experiment import sha256
 from evotac.learning.recovery_observation import RecoveryHistory, recovery_summary
 from evotac.learning.recovery_training import RecoveryTrainingDriver
@@ -64,7 +64,8 @@ def main():
     policy_cfg.update(model_gpu=args.model_gpu, inference_seed=args.seed)
     backend = wrapper = None
     report = {"status": "starting", "protocol": "evotac.strict_paired_prefix.v1",
-              "evidence_scope": "strict paired counterfactual if replay gates pass",
+              "evidence_scope": "snapshot diagnostic; causal equivalence not certified",
+              "audit_gate": "strict_visible_and_hidden_state.v2",
               "seed": args.seed, "prefix_controls": args.prefix_controls,
               "post_prefix_controls": args.post_prefix_controls,
               "recovery_controls": args.recovery_controls,
@@ -83,8 +84,12 @@ def main():
             observation, _, terminated, truncated, _ = wrapper.step(policy.next_action(observation, policy_cfg["prompt"]))
             if terminated or truncated:
                 raise RuntimeError("source reached terminal before prefix boundary")
-        scene = wrapper.export_scene()
         shared_snapshot = wrapper.snapshot_shared_state()
+        # Capture the source scene after snapshot creation.  Snapshot
+        # creation performs the same render synchronization used by restore;
+        # exporting before it compares a pre-sync camera buffer with a
+        # post-restore buffer and can report renderer latency as state drift.
+        scene = wrapper.export_scene()
         pending = [action.as_dict() for action in policy.pending]
         report.update(source_episode_path=str(wrapper.logger.path), source_scene_sha256=scene["integrity_sha256"],
                       source_pending_actions=len(pending), versions=versions,
@@ -100,16 +105,15 @@ def main():
         learner = RecoverySAC(128, 7, hidden_dim=128, device="cpu", seed=0)
         _load_actor(args.trainer_checkpoint, args.warmstart, learner)
 
-        # A one-step same-action probe is the minimum continuation gate. It is
-        # run from two independent restores of the same UIPC frame before the
-        # actual A/B branches. The probe does not prove every future step, but
-        # it prevents a shared frame identifier from being mistaken for causal
-        # equivalence.
+        # Repeated one-step restores diagnose visible drift. Their empirical
+        # image range is not a tolerance and cannot certify hidden state or
+        # replace repeated continuous same-action rollouts.
         probe_action = Action(**pending[0]) if pending else None
         if probe_action is None:
             raise RuntimeError("source prefix did not leave a pending base action for continuation probe")
         probe_observations = []
-        for probe_name in ("probe_baseline", "probe_recovery"):
+        for probe_name in ("probe_control_a", "probe_control_b", "probe_control_c",
+                           "probe_control_d", "probe_candidate"):
             policy.reset()
             backend.reset_seed(args.seed)
             probe_observation = wrapper.restore_shared_state(shared_snapshot, branch_id=probe_name)
@@ -118,18 +122,36 @@ def main():
                 raise RuntimeError("continuation probe terminated before producing an observation")
             probe_observations.append(probe_observation)
             wrapper.stop("continuation_probe_complete")
-        continuation_probe = observation_audit(probe_observations[0], probe_observations[1])
+        continuation_probe = continuation_audit(probe_observations)
         report["continuation_probe"] = continuation_probe
 
         def run_branch(name):
             policy.reset()
             backend.reset_seed(args.seed)
             observation = wrapper.restore_shared_state(shared_snapshot, branch_id=name)
-            reconstruction = {"status": "shared_state_restored",
+            actor_pose_errors = {}
+            for actor_name, expected_pose in shared_snapshot.get("actor_poses", {}).items():
+                actor = wrapper.task._actor_manager.actors.get(actor_name)
+                if actor is None:
+                    actor_pose_errors[actor_name] = {"present": False}
+                    continue
+                actual_pose = np.asarray(actor.get_pose("matrix"))
+                expected_pose = np.asarray(expected_pose)
+                delta = np.abs(actual_pose - expected_pose)
+                actor_pose_errors[actor_name] = {
+                    "present": True, "max_abs": float(delta.max()),
+                    "rmse": float(np.sqrt(np.mean((actual_pose - expected_pose) ** 2))),
+                }
+            reconstruction_audit = observation_audit(scene["observation"], observation)
+            actor_state_match = bool(actor_pose_errors) and all(row.get("present") and row.get("max_abs") == 0
+                                    for row in actor_pose_errors.values())
+            reconstruction = {**reconstruction_audit, "status": "shared_state_restored",
                               "snapshot_digest": shared_snapshot["snapshot_digest"],
                               "uipc_frame": shared_snapshot["uipc_frame"],
-                              "continuation_probe_match": continuation_probe.get("observations_match", False),
-                              **observation_audit(scene["observation"], observation)}
+                              "actor_pose_errors": actor_pose_errors,
+                              "state_match": bool(reconstruction_audit["state_match"] and actor_state_match),
+                              "actor_state_match": bool(actor_state_match),
+                              "continuation_probe_match": continuation_probe.get("observations_match", False)}
             row = {"branch": name, "reconstruction": reconstruction,
                    "episode_path": str(wrapper.logger.path), "recovery_actions": 0,
                    "post_prefix_controls": 0}
@@ -188,12 +210,7 @@ def main():
 
         for name in ("baseline", "recovery"):
             report["branches"].append(run_branch(name))
-        report["paired_valid"] = all(
-            row.get("status") == "finished" and row.get("reconstruction", {}).get("valid_match") is True
-            and report.get("continuation_probe", {}).get("observations_match") is True
-            and row.get("outcome", {}).get("valid_trial") is True
-            and not row.get("outcome", {}).get("incomplete", True)
-            for row in report["branches"])
+        report["paired_valid"] = strict_paired_valid(report)
         report["status"] = "completed" if report["paired_valid"] else "completed_with_ineligible_branches"
         report["evidence_scope"] = "snapshot diagnostic; single-step probe does not certify hidden-state equivalence"
     except BaseException as exc:

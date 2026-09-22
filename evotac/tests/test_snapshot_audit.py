@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import numpy as np
 
-from evotac.evaluation.snapshot_audit import observation_audit
+from evotac.evaluation.snapshot_audit import continuation_audit, observation_audit, strict_paired_valid
 
 
 def observation():
@@ -31,3 +31,13 @@ def test_snapshot_identifier_cannot_hide_camera_or_action_drift():
     assert not report["metadata_match"]["previous_action"]
     assert report["errors"]["images.camera.head.rgb"]["max_abs"] == 10
     assert not report["valid_match"]
+
+
+def test_render_range_is_diagnostic_and_cannot_pass_strict_gate():
+    observations = [observation() for _ in range(5)]
+    observations[4]["images"]["camera"]["head"]["rgb"]["data"][0, 0, 0] = 1
+    report = continuation_audit(observations)
+    assert report["within_control_image_range"] is False
+    assert report["observations_match"] is False
+    assert report["valid_match"] is False
+    assert not strict_paired_valid({"continuation_probe": report, "branches": []})

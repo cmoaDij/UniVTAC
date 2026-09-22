@@ -7,24 +7,26 @@ section{background:#fff;border:1px solid #d8e0e7;border-radius:10px;padding:18px
 table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px solid #e1e6eb;text-align:left;vertical-align:top}code{background:#eef2f5;padding:2px 5px;border-radius:4px}.ok{color:#16733b}.warn{color:#9a5b00}.bad{color:#a12622}.muted{color:#5b6872}.banner{border-left:4px solid #a12622;background:#fff0ef;padding:10px 14px}
 </style></head><body>
 <h1>EvoTac 当前验证报告</h1>
-<p class="muted">更新时间：2026-09-22 18:30 CST · 分支：<code>isaac51</code> · 提交：<code>1fac256</code></p>
+<p class="muted">更新时间：2026-09-22 23:35 CST · 分支：<code>isaac51</code> · 修复审计待提交</p>
 <section><h2>当前结论</h2><div class="banner"><strong>严格共享状态/连续 rollout 快照审计失败；test 被门禁阻断，不能宣称 EvoTac 的因果收益。</strong> 训练 plumbing 已完成，策略效果仍未得到公平、可归因的证据。</div>
 <table><tr><th>层级</th><th>结果</th><th>证据</th></tr>
-<tr><td>软件测试</td><td class="ok">通过：95 passed</td><td><code>PYTHONPATH=. /data/ZED/conda/envs/UniVTAC/bin/python -m pytest -q evotac/tests</code></td></tr>
+<tr><td>软件测试</td><td class="ok">通过：96 passed</td><td><code>PYTHONPATH=. /data/ZED/conda/envs/UniVTAC/bin/python -m pytest -q evotac/tests</code></td></tr>
 <tr><td>训练 plumbing</td><td class="ok">通过：159 train parent，641 条真实恢复转移，626 次 SAC 更新</td><td><a href="../runs/phase1/p4_validation_resume_20260922_recovered/training_evidence_audit.json">training_evidence_audit.json</a>：checkpoint/replay/action 对应审计通过</td></tr>
 <tr><td>dev 校准</td><td class="warn">已完成，小样本且未证明效果</td><td>baseline 1/3；候选成功数分别为 0/3、1/3、1/3、1/3、0/3；预设规则选阈值 0.3、恢复上限 12</td></tr>
 <tr><td>策略效果</td><td class="warn">未证实</td><td>dev 只有 3 个 seed，候选没有超过 baseline 的明确优势；不能外推到 test</td></tr>
-<tr><td>严格因果快照审计</td><td class="bad">失败</td><td><a href="../runs/phase1/p4_validation_resume_20260922_recovered_snapshot_dev23/checks.json">snapshot_dev23/checks.json</a>：probe observations_match=false、paired_valid=false</td></tr>
+<tr><td>严格因果快照审计</td><td class="bad">失败，仍阻断 test</td><td>原始 <a href="../runs/phase1/p4_validation_resume_20260922_recovered_snapshot_dev23/checks.json">snapshot_dev23/checks.json</a> 与修复后 <a href="../runs/phase1/p4_snapshot_rng_fix_full_dev23/checks.json">snapshot_rng_fix_full_dev23/checks.json</a> 都不能证明严格可见观测和隐藏状态一致；修复后 state_match=true，但相机/触觉图像仍有差异，经验渲染范围只作诊断，不能放宽门禁</td></tr>
 <tr><td>独立 test</td><td class="bad">未运行（门禁阻断）</td><td>流水线 <code>status=blocked_snapshot_audit</code>，<code>test_status=not_started_pending_causal_gate</code></td></tr>
 </table></section>
 <section><h2>真实训练与恢复记录</h2><p>原追加运行 <code>p4_validation_resume_20260922_extra0</code> 在第 42/60 个 seed（seed 190）后停止，文件保留为中断证据，未覆盖。其 checkpoint 已核验包含 562 条转移和 547 次更新。随后从该 checkpoint 续接剩余 18 个 train seed，完成运行 <code>p4_validation_resume_20260922_tail18</code>，最终 checkpoint SHA-256 为 <code>6948d71dcdd56b883bfc2f05ba9d88cc7acfbf7957c959e0e050b606c69593d1</code>。最终 replay 奖励分布为 614 个 0.0、27 个 0.99，正奖励比例 27/641 = 4.21%；终止原因：object_lost 61、success 40、task_budget 47、recovery_budget 11。</p>
 <p>追加训练中另有一次预建目录导致的启动失败，记录在 <code>p4_validation_resume_20260922_extra1/console.log</code>，没有产生 episode，未计入结果。中断与续接证据见 <a href="../runs/phase1/p4_validation_resume_20260922_recovered/interruption_record.json">interruption_record.json</a>。</p></section>
-<section><h2>快照审计失败证据</h2><p>在 dev seed 23 上，两个分支均完整结束且 valid_trial=true，但同一 UIPC frame 的连续 probe 不满足精确观测一致性：head RGB 最大绝对差 16，wrist RGB 最大绝对差 143，right tactile RGB/rgb_marker 最大绝对差 17；<code>observations_match=false</code>，分支 <code>valid_match=false</code>。因此共享状态不能作为因果反事实依据，恢复分支的结果不能归因于 EvoTac。</p></section>
+<section><h2>一致性问题分析与修复</h2><p>已定位三类来源：快照源分支在相机同步前导出，RTX 相机缓冲可落后一帧；TacEx 的 marker simulator 每次生成 marker flow 都推进私有 NumPy RNG，而快照没有保存它；机器人关节/物体状态恢复存在小于 1e-6 的浮点误差。代码已统一源/恢复渲染路径、保存和恢复每个触觉传感器的 marker RNG，并把物理状态比较设为 1e-6 诊断界限。</p><p>修复后 dev23 的 <a href="../runs/phase1/p4_snapshot_rng_fix_full_dev23/checks.json">完整审计</a>：两个分支都完整结束（均为 <code>object_lost</code>、<code>valid_trial=true</code>），actor pose 精确相同，<code>state_match=true</code>；但原始图像仍非逐像素一致（wrist 最大差 81，触觉最大差约 18），因此 <code>observations_match=false</code>。代码曾把候选落在四次控制渲染范围内误判为 <code>paired_valid=true</code>，现已改为 fail-closed：经验渲染范围永远不能替代严格观测或隐藏状态证据。</p></section>
+<section><h2>快照审计失败证据</h2><p>原始 dev seed 23 的 head RGB 最大绝对差 16、wrist RGB 最大绝对差 143，right tactile RGB/rgb_marker 最大绝对差 17；修复后仍存在 RTX 相机和触觉光学输出差异。<code>test_status=not_started_pending_causal_gate</code>，因此共享状态不能作为因果反事实依据，恢复分支结果不能归因于 EvoTac。</p></section>
 <section><h2>实时证据文件</h2><ul>
 <li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/status.json">恢复流水线 status.json</a></li>
 <li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/training_evidence_audit.json">训练证据审计</a></li>
 <li><a href="../runs/phase1/p4_validation_resume_20260922_tail18/checks.json">完成的续接训练 checks</a></li>
-<li><a href="../runs/phase1/p4_validation_resume_20260922_recovered_snapshot_dev23/checks.json">严格快照审计 checks</a></li>
+<li><a href="../runs/phase1/p4_validation_resume_20260922_recovered_snapshot_dev23/checks.json">原始严格快照审计 checks</a></li>
+<li><a href="../runs/phase1/p4_snapshot_rng_fix_full_dev23/checks.json">修复后 dev23 审计 checks</a></li>
 <li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/software_tests.log">软件测试日志</a></li>
 </ul><p class="muted">runs、datasets、checkpoint 和日志均为本机证据，不提交到 Git。</p></section>
 </body></html>

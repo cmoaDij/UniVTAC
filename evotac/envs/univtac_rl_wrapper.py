@@ -197,6 +197,12 @@ class UniVTACRLWrapper:
         if self.logger is None or self.done:
             raise RuntimeError("a live episode is required for a shared-state snapshot")
         task = self.task
+        # The source branch must use the same render synchronization protocol
+        # as a restored branch.  Without this explicit pass, export_scene can
+        # retain the previous camera buffer while restore_shared_state reads a
+        # freshly submitted RTX frame, making renderer latency look like state
+        # divergence.
+        task._update_render()
         robot = task._robot_manager.robot
         task.uipc_sim.save_frame()
         joint_pos = robot.data.joint_pos.detach().cpu().numpy().copy()
@@ -205,11 +211,19 @@ class UniVTACRLWrapper:
         velocity_target = robot.data.joint_vel_target.detach().cpu().numpy().copy()
         actor_poses = {name: actor.get_pose("matrix").copy()
                        for name, actor in task._actor_manager.actors.items()}
+        marker_rng_states = {}
+        for name, tactile in task._tactile_manager.tactiles.items():
+            simulator = getattr(tactile.sensor, "marker_motion_simulator", None)
+            marker_sim = getattr(simulator, "marker_motion_sim", None)
+            marker_rng = getattr(marker_sim, "_marker_rng", None)
+            if marker_rng is not None:
+                marker_rng_states[name] = deepcopy(marker_rng.bit_generator.state)
         payload = {
             "uipc_frame": int(task.uipc_sim.world.frame()),
             "joint_pos": joint_pos, "joint_vel": joint_vel,
             "joint_target": joint_target, "velocity_target": velocity_target,
             "actor_poses": actor_poses,
+            "marker_rng_states": marker_rng_states,
             "task_elapsed": int(self.task_elapsed), "recovery_elapsed": int(self.recovery_elapsed),
             "physics_step": int(task._physics_step_count),
             "phase": str(task.phase), "task_rng": deepcopy(task.rng.bit_generator.state),
@@ -222,6 +236,7 @@ class UniVTACRLWrapper:
         payload["snapshot_digest"] = digest({
             "uipc_frame": payload["uipc_frame"], "joint_pos": joint_pos,
             "joint_vel": joint_vel, "actor_poses": actor_poses,
+            "marker_rng_states": marker_rng_states,
             "task_elapsed": payload["task_elapsed"], "physics_step": payload["physics_step"]})
         return payload
 
@@ -251,6 +266,13 @@ class UniVTACRLWrapper:
         robot.set_joint_position_target(torch.as_tensor(snapshot["joint_target"], device=task.device))
         robot.set_joint_velocity_target(torch.as_tensor(snapshot["velocity_target"], device=task.device))
         task.rng.bit_generator.state = deepcopy(snapshot["task_rng"])
+        for name, state in snapshot.get("marker_rng_states", {}).items():
+            tactile = task._tactile_manager.tactiles.get(name)
+            simulator = getattr(tactile.sensor, "marker_motion_simulator", None) if tactile else None
+            marker_sim = getattr(simulator, "marker_motion_sim", None)
+            marker_rng = getattr(marker_sim, "_marker_rng", None)
+            if marker_rng is not None:
+                marker_rng.bit_generator.state = deepcopy(state)
         task.phase = snapshot["phase"]
         task._physics_step_count = int(snapshot["physics_step"])
         task._last_render_physics_step = -1
