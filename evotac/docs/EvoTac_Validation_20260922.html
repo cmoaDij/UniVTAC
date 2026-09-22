@@ -7,10 +7,10 @@ section{background:#fff;border:1px solid #d8e0e7;border-radius:10px;padding:18px
 table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px solid #e1e6eb;text-align:left;vertical-align:top}code{background:#eef2f5;padding:2px 5px;border-radius:4px}.ok{color:#16733b}.warn{color:#9a5b00}.bad{color:#a12622}.muted{color:#5b6872}.banner{border-left:4px solid #a12622;background:#fff0ef;padding:10px 14px}
 </style></head><body>
 <h1>EvoTac 当前验证报告</h1>
-<p class="muted">更新时间：2026-09-23 01:01 CST · 分支：<code>isaac51</code> · 原始运行的源码哈希保存在各自 manifest 中</p>
+<p class="muted">更新时间：2026-09-23 01:10 CST · 分支：<code>isaac51</code> · 原始运行的源码哈希保存在各自 manifest 中</p>
 <section><h2>当前结论</h2><div class="banner"><strong>严格共享状态/连续 rollout 快照审计失败；test 被门禁阻断，不能宣称 EvoTac 的因果收益。</strong> 训练 plumbing 已完成，策略效果仍未得到公平、可归因的证据。</div>
 <table><tr><th>层级</th><th>结果</th><th>证据</th></tr>
-<tr><td>软件测试</td><td class="ok">通过：100 passed</td><td><code>PYTHONPATH=. /data/ZED/conda/envs/UniVTAC/bin/python -m pytest -q evotac/tests</code></td></tr>
+<tr><td>软件测试</td><td class="ok">通过：104 passed</td><td><code>PYTHONPATH=. /data/ZED/conda/envs/UniVTAC/bin/python -m pytest -q evotac/tests</code></td></tr>
 <tr><td>训练 plumbing</td><td class="ok">通过：159 train parent，641 条真实恢复转移，626 次 SAC 更新</td><td><a href="../runs/phase1/p4_validation_resume_20260922_recovered/training_evidence_audit.json">training_evidence_audit.json</a>：checkpoint/replay/action 对应审计通过</td></tr>
 <tr><td>dev 校准</td><td class="warn">已完成，小样本且未证明效果</td><td>baseline 1/3；候选成功数分别为 0/3、1/3、1/3、1/3、0/3；预设规则选阈值 0.3、恢复上限 12</td></tr>
 <tr><td>策略效果</td><td class="warn">未证实</td><td>dev 只有 3 个 seed，候选没有超过 baseline 的明确优势；不能外推到 test</td></tr>
@@ -33,6 +33,18 @@ table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px so
 <p><a href="../runs/phase1/p4_snapshot_aligned_source_dev23_20260923/optical_recompute.json">离线 CPU 光学重算</a>使用真实落盘的高度图和压入量：同一输入重复输出完全相同；仅微小高度差的输入可产生 13–24 灰度级的 RGB 差异。结合 Taxim 梯度离散查表代码，这支持光学映射放大数值差异的解释。CPU 与真实 GPU 输出仍有差异，故该结果仅用于原因定位，不是新的 Isaac rollout，也不是策略效果证据。此前将残差归结为右侧缓存问题、或认为 marker RNG 修复已彻底消除触觉差异，都超出了当时证据。</p>
 <p>下一步应在 dev 上量化这些观测扰动对冻结策略动作和完整轨迹的影响，并检验更长时间的状态恢复。当前不能用本轮最大差拟合宽松容差放行。证明总体成功率提升不必要求每个像素完全相同，但必须先明确并冻结公平的统计评估协议；现有严格门禁与 test 阻断保持不变。</p>
 </section>
+<section><h2>冻结策略的观测敏感性（2026-09-23）</h2>
+<p>已完成 <code>p4_snapshot_policy_sensitivity_dev23_20260923_r1</code>：读取上述 dev seed 23 的源/恢复候选分支，共 5 个同刻边界；每个边界运行源、源重复、完整恢复观测，以及仅替换相机、触觉、本体状态的 6 个版本，共 30 次 FTP-1 与 30 次 SAC 推理。FTP-1 每次重置相同随机种子 23，SAC 使用确定性动作和全新掩码历史；沿用冻结权重。没有启动 Isaac，没有执行这些动作，也没有训练或运行 test。</p>
+<table><tr><th>比较（对源观测）</th><th>FTP-1 关节目标最大差 / rad</th><th>FTP-1 夹爪目标最大差 / m</th><th>SAC 归一化平移 / 旋转 / 夹爪最大差</th></tr>
+<tr><td>相同输入重复</td><td>0</td><td>0</td><td>0 / 0 / 0</td></tr>
+<tr><td>完整恢复观测</td><td>4.31657e-4</td><td>3.85102e-7</td><td>8.86232e-4 / 8.24362e-4 / 8.57964e-4</td></tr>
+<tr><td>仅相机替换</td><td>3.35455e-4</td><td>3.64147e-7</td><td>2.81826e-4 / 1.88097e-4 / 8.44002e-5</td></tr>
+<tr><td>仅触觉替换</td><td>2.33412e-4</td><td>4.16767e-7</td><td>1.00793e-3 / 7.28801e-4 / 9.25109e-4</td></tr>
+<tr><td>仅本体状态替换</td><td>1.30177e-4</td><td>2.32365e-7</td><td>3.42727e-7 / 2.38419e-7 / 2.08616e-7</td></tr></table>
+<p>统计覆盖 5 个边界及每次解码的 16 步 FTP-1 动作。完整恢复观测的关节差约 0.0247°；按控制器比例换算，SAC 请求平移差最大约 0.886 μm、旋转差约 8.24e-6 rad、夹爪差约 0.172 μm，均为 IK/限幅前的请求差，不是实测运动误差。所有版本的未校准风险代理约 0.171，低于已选触发阈值 0.3，且 stable 均为 true；该片段未覆盖临界触发状态。</p>
+<p><strong>结论：残余观测扰动确实改变动作，本短片段的变化量已被量化；没有完整闭环轨迹或成功率证据。</strong> 模态效应非线性，不能相加解释贡献；仅一个 dev seed、一个恢复分支，不能证明普遍鲁棒性、隐藏状态等价或自进化有效性。严格审计仍失败，不使用这些最大值事后放宽门禁。下一步需在 dev 上检查完整闭环 A/A 重复波动及 A/B 差异，并预先冻结统计评估协议；正式 test 仍阻断。</p>
+<p><a href="Snapshot_Policy_Sensitivity.md">复现步骤和诊断语义</a> · <a href="../runs/phase1/p4_snapshot_policy_sensitivity_dev23_20260923_r1/report.json">逐边界结果/输入与源码哈希</a> · <a href="../runs/phase1/p4_snapshot_policy_sensitivity_dev23_20260923_r1/review.json">汇总与 66 个证据文件哈希</a>。首次尝试因新脚本输出路径解析失败，未启动模型 worker；失败记录保留，修复后使用新运行目录完成。</p>
+</section>
 <section><h2>历史快照审计失败证据</h2><p>旧完整诊断 <code>p4_snapshot_rng_fix_full_dev23</code> 原文件仍保留 <code>paired_valid=true</code>，这是此前放宽门禁导致的误判，按当前门禁重算为 false；原文件不回写。原始 dev seed 23 的 head RGB 最大绝对差 16、wrist RGB 最大绝对差 143，right tactile RGB/rgb_marker 最大绝对差 17；修复后仍存在 RTX 相机和触觉光学输出差异。<code>test_status=not_started_pending_causal_gate</code>，因此共享状态不能作为因果反事实依据，恢复分支结果不能归因于 EvoTac。</p></section>
 <section><h2>实时证据文件</h2><ul>
 <li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/status.json">恢复流水线 status.json</a></li>
@@ -41,6 +53,7 @@ table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px so
 <li><a href="../runs/phase1/p4_validation_resume_20260922_recovered_snapshot_dev23/checks.json">原始严格快照审计 checks</a></li>
 <li><a href="../runs/phase1/p4_snapshot_rng_fix_full_dev23/checks.json">修复后 dev23 审计 checks</a></li>
 <li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/software_tests_sensor_diag_final_20260923.log">100 项软件测试日志</a></li>
+<li><a href="../runs/phase1/software_tests_policy_sensitivity_20260923.log">最新 104 项软件测试日志</a></li>
 <li><a href="../runs/phase1/p4_snapshot_aligned_source_dev23_20260923/checks.json">同刻源轨迹/恢复轨迹诊断 checks</a></li>
 </ul><p class="muted">runs、datasets、checkpoint 和日志均为本机证据，不提交到 Git。</p></section>
 </body></html>
