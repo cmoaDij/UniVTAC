@@ -1,0 +1,16 @@
+{
+  "schema": "evotac.recovery_dev_comparison.v1",
+  "split": "dev",
+  "seeds": [0, 18, 23, 24, 39, 47, 59, 82, 86, 90],
+  "arms": ["baseline_a", "baseline_b", "warmstart", "trained"],
+  "order_seed": 20260923,
+  "monitor_object_lost_risk": 0.3,
+  "max_recovery_actions": 12,
+  "stable_cycles": 3,
+  "primary_comparison": ["trained", "baseline_a"],
+  "secondary_comparison": ["trained", "warmstart"],
+  "scope": "exploratory dev fresh-process complete rollouts; no snapshot counterfactual or independent test",
+  "stopping_rule": "complete all 40 scheduled attempts; stop on infrastructure/provenance failure; no outcome-based early stopping or replacement",
+  "invalid_rule": "retain every attempt; show valid-trial and scheduled-attempt denominators; do not label invalid attempts physical task failures",
+  "claim_rule": "descriptive dev evidence only; snapshot gate remains unchanged; no full self-evolution claim from single-skill SAC"
+}
