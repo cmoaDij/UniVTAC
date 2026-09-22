@@ -44,7 +44,6 @@ def _load_actor(checkpoint, warmstart, learner):
     return state
 
 
-
 def main():
     parser = parser_for(__doc__)
     parser.add_argument("--policy-config", type=Path, default=ROOT / "configs/ftp1_insert_hole_chunk16.yaml")

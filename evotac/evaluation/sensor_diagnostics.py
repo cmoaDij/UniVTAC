@@ -109,4 +109,3 @@ def _compare_sensor_diagnostics(source, candidate):
                     "candidate_sha256": hashlib.sha256(np.ascontiguousarray(right).view(np.uint8).tobytes()).hexdigest(),
                 }
     return {"same_physics_step": same_step, "source": source[0], "candidate": candidate[0], "differences": differences}
-
