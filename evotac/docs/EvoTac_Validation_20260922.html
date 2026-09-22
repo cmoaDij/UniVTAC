@@ -1,31 +1,30 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EvoTac 当前验证报告</title>
+<title>EvoTac 验证报告（2026-09-22）</title>
 <style>
 body{font:16px/1.6 system-ui,-apple-system,"Noto Sans SC",sans-serif;max-width:1100px;margin:32px auto;padding:0 20px;color:#17212b;background:#f6f8fa}
 section{background:#fff;border:1px solid #d8e0e7;border-radius:10px;padding:18px;margin:16px 0}
-table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px solid #e1e6eb;text-align:left;vertical-align:top}code{background:#eef2f5;padding:2px 5px;border-radius:4px}a{color:#1464a5}.ok{color:#16733b}.warn{color:#9a5b00}.bad{color:#a12622}.muted{color:#5b6872}.banner{border-left:4px solid #9a5b00;background:#fff8e6;padding:10px 14px}
-</style></head>
-<body><h1>EvoTac 当前验证报告</h1>
-<p class="muted">更新时间：2026-09-22 16:17:53 CST · 分支：<code>isaac51</code> · 提交：<code>1d9e4a2</code></p>
-<section><h2>当前结论</h2><div class="banner"><strong>训练仍在进行，暂不能宣称 EvoTac 有效。</strong> 当前流水线尚未进入 dev 校准、严格快照因果审计或 test 评估。</div>
-<table><tr><th>项目</th><th>最新状态</th></tr>
-<tr><td>软件测试</td><td class="ok">95 passed（刚复跑）</td></tr>
-<tr><td>已完成源训练</td><td>60 个场景，376 条真实恢复转移</td></tr>
-<tr><td>追加训练批次</td><td>31/60 个场景已写入 checks；训练记录 489/500 条目标转移，474 次 SAC 更新</td></tr>
-<tr><td>追加批次终止原因</td><td>task_budget 9；object_lost 12；success 9；recovery_budget 1</td></tr>
-<tr><td>dev 校准</td><td class="warn">尚未开始</td></tr>
-<tr><td>test 评估</td><td class="warn">尚未开始；当前状态为 not_started</td></tr>
-<tr><td>严格快照因果门禁</td><td class="bad">未通过/尚未运行；causal_evidence=false</td></tr>
+table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px solid #e1e6eb;text-align:left;vertical-align:top}code{background:#eef2f5;padding:2px 5px;border-radius:4px}.ok{color:#16733b}.warn{color:#9a5b00}.bad{color:#a12622}.muted{color:#5b6872}.banner{border-left:4px solid #a12622;background:#fff0ef;padding:10px 14px}
+</style></head><body>
+<h1>EvoTac 当前验证报告</h1>
+<p class="muted">更新时间：2026-09-22 18:30 CST · 分支：<code>isaac51</code> · 提交：<code>1fac256</code></p>
+<section><h2>当前结论</h2><div class="banner"><strong>严格共享状态/连续 rollout 快照审计失败；test 被门禁阻断，不能宣称 EvoTac 的因果收益。</strong> 训练 plumbing 已完成，策略效果仍未得到公平、可归因的证据。</div>
+<table><tr><th>层级</th><th>结果</th><th>证据</th></tr>
+<tr><td>软件测试</td><td class="ok">通过：95 passed</td><td><code>PYTHONPATH=. /data/ZED/conda/envs/UniVTAC/bin/python -m pytest -q evotac/tests</code></td></tr>
+<tr><td>训练 plumbing</td><td class="ok">通过：159 train parent，641 条真实恢复转移，626 次 SAC 更新</td><td><a href="../runs/phase1/p4_validation_resume_20260922_recovered/training_evidence_audit.json">training_evidence_audit.json</a>：checkpoint/replay/action 对应审计通过</td></tr>
+<tr><td>dev 校准</td><td class="warn">已完成，小样本且未证明效果</td><td>baseline 1/3；候选成功数分别为 0/3、1/3、1/3、1/3、0/3；预设规则选阈值 0.3、恢复上限 12</td></tr>
+<tr><td>策略效果</td><td class="warn">未证实</td><td>dev 只有 3 个 seed，候选没有超过 baseline 的明确优势；不能外推到 test</td></tr>
+<tr><td>严格因果快照审计</td><td class="bad">失败</td><td><a href="../runs/phase1/p4_validation_resume_20260922_recovered_snapshot_dev23/checks.json">snapshot_dev23/checks.json</a>：probe observations_match=false、paired_valid=false</td></tr>
+<tr><td>独立 test</td><td class="bad">未运行（门禁阻断）</td><td>流水线 <code>status=blocked_snapshot_audit</code>，<code>test_status=not_started_pending_causal_gate</code></td></tr>
 </table></section>
-<section><h2>GPU 状态</h2><p>GPU9 被当前追加训练流水线保留；不要在其上启动并发仿真。GPU0 未用于训练，历史预检曾报告 <code>GPU requires reset</code>。</p>
-<table><tr><th>GPU</th><th>型号</th><th>显存已用/总量</th><th>利用率</th><th>说明</th></tr><tr><td>0</td><td>NVIDIA RTX 5880 Ada Generation</td><td>752 MiB / 49140 MiB</td><td>[N/A]</td><td>未用于本次训练；此前预检提示 requires reset</td></tr><tr><td>1</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33629 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>2</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33593 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>3</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33593 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>4</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33593 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>5</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33586 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>6</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33591 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>7</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33593 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>8</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33596 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>9</td><td>NVIDIA RTX 5880 Ada Generation</td><td>30191 MiB / 49140 MiB</td><td>81 %</td><td>当前流水线使用；不要并发启动任务</td></tr></table></section>
-<section><h2>验证流程</h2><ol><li>追加训练完成后确认至少 500 条真实转移。</li><li>只用 train/dev 数据校准阈值与恢复预算，不读取 test 进行选择。</li><li>冻结 checkpoint、阈值和预算，执行严格共享状态/连续 rollout 快照审计。</li><li>快照审计通过后，才运行独立 test；失败时不报告因果收益。</li></ol></section>
+<section><h2>真实训练与恢复记录</h2><p>原追加运行 <code>p4_validation_resume_20260922_extra0</code> 在第 42/60 个 seed（seed 190）后停止，文件保留为中断证据，未覆盖。其 checkpoint 已核验包含 562 条转移和 547 次更新。随后从该 checkpoint 续接剩余 18 个 train seed，完成运行 <code>p4_validation_resume_20260922_tail18</code>，最终 checkpoint SHA-256 为 <code>6948d71dcdd56b883bfc2f05ba9d88cc7acfbf7957c959e0e050b606c69593d1</code>。最终 replay 奖励分布为 614 个 0.0、27 个 0.99，正奖励比例 27/641 = 4.21%；终止原因：object_lost 61、success 40、task_budget 47、recovery_budget 11。</p>
+<p>追加训练中另有一次预建目录导致的启动失败，记录在 <code>p4_validation_resume_20260922_extra1/console.log</code>，没有产生 episode，未计入结果。中断与续接证据见 <a href="../runs/phase1/p4_validation_resume_20260922_recovered/interruption_record.json">interruption_record.json</a>。</p></section>
+<section><h2>快照审计失败证据</h2><p>在 dev seed 23 上，两个分支均完整结束且 valid_trial=true，但同一 UIPC frame 的连续 probe 不满足精确观测一致性：head RGB 最大绝对差 16，wrist RGB 最大绝对差 143，right tactile RGB/rgb_marker 最大绝对差 17；<code>observations_match=false</code>，分支 <code>valid_match=false</code>。因此共享状态不能作为因果反事实依据，恢复分支的结果不能归因于 EvoTac。</p></section>
 <section><h2>实时证据文件</h2><ul>
-<li><a href="../runs/phase1/p4_validation_resume_20260922/status.json">流水线状态</a>（状态更新可能落后于子进程，子进程结束后刷新）</li>
-<li><a href="../runs/phase1/p4_validation_resume_20260922_extra0/checks.json">当前追加批次 checks</a></li>
-<li><a href="../runs/phase1/p4_validation_resume_20260922/p4_validation_resume_20260922_extra0.log">流水线日志</a></li>
-<li><a href="../runs/phase1/p4_real_train_resume60_20260922/checks.json">已完成源训练 checks</a></li>
-<li><a href="../EvoTac_Implementation_Status.md">阶段实现状态（静态说明）</a></li>
-</ul><p class="muted">本页是本机实时证据的静态快照；训练结束后重新生成即可刷新数字。生成时间：2026-09-22 16:17:53 CST。</p></section>
+<li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/status.json">恢复流水线 status.json</a></li>
+<li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/training_evidence_audit.json">训练证据审计</a></li>
+<li><a href="../runs/phase1/p4_validation_resume_20260922_tail18/checks.json">完成的续接训练 checks</a></li>
+<li><a href="../runs/phase1/p4_validation_resume_20260922_recovered_snapshot_dev23/checks.json">严格快照审计 checks</a></li>
+<li><a href="../runs/phase1/p4_validation_resume_20260922_recovered/software_tests.log">软件测试日志</a></li>
+</ul><p class="muted">runs、datasets、checkpoint 和日志均为本机证据，不提交到 Git。</p></section>
 </body></html>
