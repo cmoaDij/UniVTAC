@@ -1,5 +1,7 @@
 # EvoTac phase 1
 
+> Current validation (2026-09-23): real training has 641 recovery transitions and 626 SAC updates; 100 software tests pass. Snapshot diagnostics remain ineligible for causal claims and independent test is blocked. Use the [current validation report](docs/EvoTac_Validation_20260922.html); older replay/paired acceptance statements below are historical and do not certify the current checkpoint or strict snapshot gate.
+
 Independent UniVTAC `insert_hole` control/data extension. **Phase-1 interface acceptance is complete. Configuration and v3 replay tolerances are frozen; out-of-envelope replays are rejected and retained.** See [implementation evidence and limits](docs/Phase1_Implementation_Status.md) and [the implementation plan](../myideas/EvoTac_Phase1_Implementation_Plan.md).
 
 The real FTP-1 checkpoint (the requested Pi0.5-based alternative) is available through an isolated model worker and the livestream controller. See [installation, launch commands, mappings and validation](docs/FTP1_Integration.md).

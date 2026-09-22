@@ -56,7 +56,7 @@ def launch(args):
     tracked = subprocess.check_output(["git", "ls-files", "envs", "third_party/TacEx", "task_config", "scripts"], cwd=source, text=True).splitlines()
     hashes = {name: hashlib.sha256((source/name).read_bytes()).hexdigest() for name in tracked if (source/name).is_file()}
     own_hashes = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
-                  for directory in ("envs", "data", "learning", "perf", "scripts")
+                  for directory in ("envs", "data", "evaluation", "learning", "perf", "scripts")
                   if (ROOT/directory).exists() for p in (ROOT/directory).rglob("*.py")}
     asset_files = [source/"assets/objects"/name for name in ("TestTube.usd", "TestTubeBase.usd", "TestTubeHoleSlot.usd")]
     asset_files += list((source/"assets/embodiments/franka").glob("*"))

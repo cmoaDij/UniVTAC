@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import yaml
 
+from evotac.evaluation.sensor_diagnostics import _sensor_diagnostics, _compare_sensor_diagnostics
 from evotac.config import ROOT
 from evotac.data.rollout_logger import write_tree
 from evotac.data.schemas import Action, json_value
@@ -43,6 +44,7 @@ def _load_actor(checkpoint, warmstart, learner):
     return state
 
 
+
 def main():
     parser = parser_for(__doc__)
     parser.add_argument("--policy-config", type=Path, default=ROOT / "configs/ftp1_insert_hole_chunk16.yaml")
@@ -50,6 +52,8 @@ def main():
     parser.add_argument("--split", choices=("train", "dev", "test"), default="test")
     # parser_for already provides --seed; this evaluator requires it below.
     parser.add_argument("--prefix-controls", type=int, default=12)
+    parser.add_argument("--probe-controls", type=int, default=1,
+                        help="identical queued actions per source/restore diagnostic trajectory")
     parser.add_argument("--post-prefix-controls", type=int, default=188)
     parser.add_argument("--recovery-controls", type=int, default=19)
     parser.add_argument("--monitor-object-lost-risk", type=float, default=0.3,
@@ -57,7 +61,7 @@ def main():
     parser.add_argument("--warmstart", type=Path, required=True)
     parser.add_argument("--trainer-checkpoint", type=Path, required=True)
     args = parser.parse_args()
-    if args.seed < 0 or args.prefix_controls < 1 or args.post_prefix_controls < 1:
+    if args.seed < 0 or args.prefix_controls < 1 or args.post_prefix_controls < 1 or args.probe_controls < 1:
         raise ValueError("seed and control counts must be positive")
     config, paths, versions, launcher = launch(args)
     policy_cfg = yaml.safe_load(args.policy_config.read_text())
@@ -67,10 +71,13 @@ def main():
               "evidence_scope": "snapshot diagnostic; causal equivalence not certified",
               "audit_gate": "strict_visible_and_hidden_state.v2",
               "seed": args.seed, "prefix_controls": args.prefix_controls,
+              "probe_controls": args.probe_controls,
               "post_prefix_controls": args.post_prefix_controls,
               "recovery_controls": args.recovery_controls,
               "monitor_object_lost_risk": args.monitor_object_lost_risk,
               "warmstart": str(args.warmstart), "trainer_checkpoint": str(args.trainer_checkpoint),
+              "checkpoint_sha256": sha256(args.trainer_checkpoint),
+              "warmstart_sha256": sha256(args.warmstart),
               "branches": []}
     try:
         backend = FTP1Client(policy_cfg, paths["run_root"])
@@ -90,11 +97,13 @@ def main():
         # exporting before it compares a pre-sync camera buffer with a
         # post-restore buffer and can report renderer latency as state drift.
         scene = wrapper.export_scene()
+        source_sensor_diag = _sensor_diagnostics(wrapper)
         pending = [action.as_dict() for action in policy.pending]
         report.update(source_episode_path=str(wrapper.logger.path), source_scene_sha256=scene["integrity_sha256"],
                       source_pending_actions=len(pending), versions=versions,
                       shared_snapshot_digest=shared_snapshot["snapshot_digest"],
-                      shared_snapshot_frame=shared_snapshot["uipc_frame"])
+                      shared_snapshot_frame=shared_snapshot["uipc_frame"],
+                      source_sensor_diagnostics=source_sensor_diag[0])
         with h5py.File(paths["run_root"] / "source_scene.h5", "x") as handle:
             write_tree(handle, scene)
 
@@ -105,30 +114,77 @@ def main():
         learner = RecoverySAC(128, 7, hidden_dim=128, device="cpu", seed=0)
         _load_actor(args.trainer_checkpoint, args.warmstart, learner)
 
-        # Repeated one-step restores diagnose visible drift. Their empirical
-        # image range is not a tolerance and cannot certify hidden state or
-        # replace repeated continuous same-action rollouts.
-        probe_action = Action(**pending[0]) if pending else None
-        if probe_action is None:
-            raise RuntimeError("source prefix did not leave a pending base action for continuation probe")
-        probe_observations = []
+        # Continue the unrecovered source as a reference. Compare each restore
+        # after the same queued actions at the same physics steps; comparing
+        # a post-action probe to the pre-action source confounds motion/drift.
+        if len(pending) < args.probe_controls:
+            raise RuntimeError("insufficient queued actions for identical continuation probe")
+        probe_actions = [Action(**action) for action in pending[:args.probe_controls]]
+        report["probe_actions"] = [action.as_dict() for action in probe_actions]
+
+        def capture(label):
+            diagnostic = _sensor_diagnostics(wrapper)
+            # Keep raw arrays locally for follow-up attribution without another
+            # expensive simulator run. Never used as policy observations.
+            with h5py.File(paths["run_root"] / "sensor_diagnostics.h5", "a") as handle:
+                write_tree(handle.create_group(label), diagnostic[1])
+            return diagnostic
+
+        def continuation(label):
+            observations, diagnostics = [], []
+            for index, action in enumerate(probe_actions):
+                obs, _, terminated, truncated, _ = wrapper.step(action)
+                if obs is None or terminated or truncated:
+                    raise RuntimeError("continuation probe terminated before its fixed horizon")
+                observations.append(obs)
+                diagnostics.append(capture(f"{label}/step{index + 1}"))
+            return observations, diagnostics
+
+        # Persist source raw arrays too; capture() reads buffers without updates.
+        with h5py.File(paths["run_root"] / "sensor_diagnostics.h5", "x") as handle:
+            write_tree(handle.create_group("source/restore_boundary"), source_sensor_diag[1])
+        source_observations, source_diags = continuation("source")
+        wrapper.stop("source_continuation_probe_complete")
+        trajectories = []
+        trajectory_reports = []
         for probe_name in ("probe_control_a", "probe_control_b", "probe_control_c",
                            "probe_control_d", "probe_candidate"):
             policy.reset()
             backend.reset_seed(args.seed)
-            probe_observation = wrapper.restore_shared_state(shared_snapshot, branch_id=probe_name)
-            probe_observation, _, terminated, truncated, _ = wrapper.step(probe_action)
-            if probe_observation is None or terminated or truncated:
-                raise RuntimeError("continuation probe terminated before producing an observation")
-            probe_observations.append(probe_observation)
+            wrapper.restore_shared_state(shared_snapshot, branch_id=probe_name)
+            restored_diag = capture(f"{probe_name}/restore_boundary")
+            observations, diagnostics = continuation(probe_name)
+            trajectories.append(observations)
+            trajectory_reports.append({
+                "branch": probe_name,
+                "restoration": _compare_sensor_diagnostics(source_sensor_diag, restored_diag),
+                "steps": [
+                    {"control": index + 1,
+                     "observation_audit": observation_audit(source_observations[index], obs),
+                     "sensor_diagnostics": _compare_sensor_diagnostics(source_diags[index], diagnostics[index])}
+                    for index, obs in enumerate(observations)
+                ],
+            })
             wrapper.stop("continuation_probe_complete")
-        continuation_probe = continuation_audit(probe_observations)
+        continuation_probe = continuation_audit([rows[-1] for rows in trajectories])
+        continuation_probe["source_trajectories"] = trajectory_reports
+        continuation_probe["state_match"] = bool(
+            continuation_probe["state_match"] and all(
+                step["observation_audit"]["state_match"]
+                for row in trajectory_reports for step in row["steps"]))
+        continuation_probe["observations_match"] = bool(
+            continuation_probe["observations_match"] and all(
+                step["observation_audit"]["observations_match"]
+                for row in trajectory_reports for step in row["steps"]))
         report["continuation_probe"] = continuation_probe
+        # Save diagnostics before longer A/B branches, preserving them on crash.
+        (paths["run_root"] / "checks.json").write_text(json.dumps(json_value(report), indent=2))
 
         def run_branch(name):
             policy.reset()
             backend.reset_seed(args.seed)
             observation = wrapper.restore_shared_state(shared_snapshot, branch_id=name)
+            branch_sensor_diag = capture(f"{name}/restore_boundary")
             actor_pose_errors = {}
             for actor_name, expected_pose in shared_snapshot.get("actor_poses", {}).items():
                 actor = wrapper.task._actor_manager.actors.get(actor_name)
@@ -151,6 +207,8 @@ def main():
                               "actor_pose_errors": actor_pose_errors,
                               "state_match": bool(reconstruction_audit["state_match"] and actor_state_match),
                               "actor_state_match": bool(actor_state_match),
+                              "sensor_diagnostics": _compare_sensor_diagnostics(
+                                  source_sensor_diag, branch_sensor_diag),
                               "continuation_probe_match": continuation_probe.get("observations_match", False)}
             row = {"branch": name, "reconstruction": reconstruction,
                    "episode_path": str(wrapper.logger.path), "recovery_actions": 0,
@@ -212,7 +270,7 @@ def main():
             report["branches"].append(run_branch(name))
         report["paired_valid"] = strict_paired_valid(report)
         report["status"] = "completed" if report["paired_valid"] else "completed_with_ineligible_branches"
-        report["evidence_scope"] = "snapshot diagnostic; single-step probe does not certify hidden-state equivalence"
+        report["evidence_scope"] = "snapshot diagnostic; bounded identical-action trajectories do not certify hidden-state equivalence"
     except BaseException as exc:
         report.update(status="failed", error=f"{type(exc).__name__}: {exc}")
         raise
