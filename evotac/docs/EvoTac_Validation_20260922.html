@@ -1,9 +1,31 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>EvoTac 当前验证报告</title>
-<style>body{font:16px/1.6 system-ui,-apple-system,"Noto Sans SC",sans-serif;max-width:1000px;margin:32px auto;padding:0 20px;color:#17212b;background:#f6f8fa}section{background:white;border:1px solid #d8e0e7;border-radius:10px;padding:18px;margin:16px 0}table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px solid #e1e6eb;text-align:left}code{background:#eef2f5;padding:2px 5px;border-radius:4px}.ok{color:#16733b}.warn{color:#9a5b00}.bad{color:#a12622}a{color:#1464a5}</style></head>
-<body><h1>EvoTac 当前验证报告</h1><p>更新：2026-09-22。所有结果都记录了运行 ID、seed、配置和 GPU 快照。</p>
-<section><h2>当前结论</h2><p class="bad">新 SAC 检查点尚未证明 EvoTac 有效，暂不进入部署。</p><table><tr><th>项目</th><th>结果</th></tr><tr><td>训练</td><td>23 个 train seed，88 条真实转移，4 条正奖励，73 次更新</td></tr><tr><td>dev</td><td>baseline 1/3；recovery 0/3</td></tr><tr><td>test</td><td>baseline 3/9；recovery 3/9；0 次成功提升，0 次成功回归</td></tr><tr><td>严格快照</td><td class="warn">paired_valid=false；相机/触觉观测未精确匹配</td></tr><tr><td>软件测试</td><td class="ok">94 passed</td></tr></table></section>
-<section><h2>GPU</h2><p>GPU0 报告 <code>GPU requires reset</code>；GPU1–8 被外部任务占用；GPU9 是当前可用卡（约 46.9 GiB 空闲）。</p></section>
-<section><h2>快速验证路线</h2><ol><li>用真实 Isaac/TacEx 采集 500–2000 条恢复转移；保留终止原因和真实 continuation reward。</li><li>用训练集统计触发分数，比较阈值 0.25、0.30、0.35 和恢复上限 6、12、20，选择正例率与预算消耗的平衡点。</li><li>冻结阈值、恢复预算和 checkpoint，禁止 test 在线更新。</li><li>严格快照只有在机器人、相机、触觉和连续 rollout 都通过审计后才进入因果比较。</li></ol></section>
-<section><h2>证据文件</h2><ul><li><a href="../runs/phase1/p3_validation_summary_20260922.json">总验证 JSON</a></li><li><a href="../runs/phase1/p3_train23_dev3_comparison_20260922.json">dev 对照</a></li><li><a href="../runs/phase1/p3_train23_test9_comparison_20260922.json">test 对照</a></li><li><a href="../runs/phase1/p3_shared_snapshot_paired_seed12_20260922_v3/checks.json">严格快照审计</a></li><li><a href="../runs/phase1/p3_full_train_train23_20260922/training_summary.json">训练摘要</a></li></ul></section>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EvoTac 当前验证报告</title>
+<style>
+body{font:16px/1.6 system-ui,-apple-system,"Noto Sans SC",sans-serif;max-width:1100px;margin:32px auto;padding:0 20px;color:#17212b;background:#f6f8fa}
+section{background:#fff;border:1px solid #d8e0e7;border-radius:10px;padding:18px;margin:16px 0}
+table{border-collapse:collapse;width:100%}td,th{padding:9px;border-bottom:1px solid #e1e6eb;text-align:left;vertical-align:top}code{background:#eef2f5;padding:2px 5px;border-radius:4px}a{color:#1464a5}.ok{color:#16733b}.warn{color:#9a5b00}.bad{color:#a12622}.muted{color:#5b6872}.banner{border-left:4px solid #9a5b00;background:#fff8e6;padding:10px 14px}
+</style></head>
+<body><h1>EvoTac 当前验证报告</h1>
+<p class="muted">更新时间：2026-09-22 16:17:53 CST · 分支：<code>isaac51</code> · 提交：<code>1d9e4a2</code></p>
+<section><h2>当前结论</h2><div class="banner"><strong>训练仍在进行，暂不能宣称 EvoTac 有效。</strong> 当前流水线尚未进入 dev 校准、严格快照因果审计或 test 评估。</div>
+<table><tr><th>项目</th><th>最新状态</th></tr>
+<tr><td>软件测试</td><td class="ok">95 passed（刚复跑）</td></tr>
+<tr><td>已完成源训练</td><td>60 个场景，376 条真实恢复转移</td></tr>
+<tr><td>追加训练批次</td><td>31/60 个场景已写入 checks；训练记录 489/500 条目标转移，474 次 SAC 更新</td></tr>
+<tr><td>追加批次终止原因</td><td>task_budget 9；object_lost 12；success 9；recovery_budget 1</td></tr>
+<tr><td>dev 校准</td><td class="warn">尚未开始</td></tr>
+<tr><td>test 评估</td><td class="warn">尚未开始；当前状态为 not_started</td></tr>
+<tr><td>严格快照因果门禁</td><td class="bad">未通过/尚未运行；causal_evidence=false</td></tr>
+</table></section>
+<section><h2>GPU 状态</h2><p>GPU9 被当前追加训练流水线保留；不要在其上启动并发仿真。GPU0 未用于训练，历史预检曾报告 <code>GPU requires reset</code>。</p>
+<table><tr><th>GPU</th><th>型号</th><th>显存已用/总量</th><th>利用率</th><th>说明</th></tr><tr><td>0</td><td>NVIDIA RTX 5880 Ada Generation</td><td>752 MiB / 49140 MiB</td><td>[N/A]</td><td>未用于本次训练；此前预检提示 requires reset</td></tr><tr><td>1</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33629 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>2</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33593 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>3</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33593 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>4</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33593 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>5</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33586 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>6</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33591 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>7</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33593 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>8</td><td>NVIDIA RTX 5880 Ada Generation</td><td>33596 MiB / 49140 MiB</td><td>100 %</td><td>外部任务占用</td></tr><tr><td>9</td><td>NVIDIA RTX 5880 Ada Generation</td><td>30191 MiB / 49140 MiB</td><td>81 %</td><td>当前流水线使用；不要并发启动任务</td></tr></table></section>
+<section><h2>验证流程</h2><ol><li>追加训练完成后确认至少 500 条真实转移。</li><li>只用 train/dev 数据校准阈值与恢复预算，不读取 test 进行选择。</li><li>冻结 checkpoint、阈值和预算，执行严格共享状态/连续 rollout 快照审计。</li><li>快照审计通过后，才运行独立 test；失败时不报告因果收益。</li></ol></section>
+<section><h2>实时证据文件</h2><ul>
+<li><a href="../runs/phase1/p4_validation_resume_20260922/status.json">流水线状态</a>（状态更新可能落后于子进程，子进程结束后刷新）</li>
+<li><a href="../runs/phase1/p4_validation_resume_20260922_extra0/checks.json">当前追加批次 checks</a></li>
+<li><a href="../runs/phase1/p4_validation_resume_20260922/p4_validation_resume_20260922_extra0.log">流水线日志</a></li>
+<li><a href="../runs/phase1/p4_real_train_resume60_20260922/checks.json">已完成源训练 checks</a></li>
+<li><a href="../EvoTac_Implementation_Status.md">阶段实现状态（静态说明）</a></li>
+</ul><p class="muted">本页是本机实时证据的静态快照；训练结束后重新生成即可刷新数字。生成时间：2026-09-22 16:17:53 CST。</p></section>
 </body></html>
