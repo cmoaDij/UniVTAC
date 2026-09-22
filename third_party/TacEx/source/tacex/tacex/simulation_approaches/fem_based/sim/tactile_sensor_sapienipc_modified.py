@@ -64,6 +64,7 @@ class VisionTactileSensorUIPC:
         marker_random_noise=0.0,
         sub_marker_num=0,
         marker_lose_tracking_probability=0.0,
+        marker_random_seed=0,
         normalize: bool = False,
         num_markers: int = 128,
         camera_to_surface: float = 0.0283,
@@ -116,6 +117,12 @@ class VisionTactileSensorUIPC:
         self.marker_random_translation_range = marker_random_translation_range
         self.marker_random_noise = marker_random_noise
         self.marker_lose_tracking_probability = marker_lose_tracking_probability
+        self.marker_random_seed = int(marker_random_seed)
+        # Keep marker post-processing deterministic per sensor episode.  The
+        # previous implementation consumed process-global np.random state,
+        # so two resets of the same physical state could emit different
+        # marker subsets and marker RGB images.
+        self._marker_rng = np.random.default_rng(self.marker_random_seed)
         self.normalize = normalize
         self.num_markers = num_markers
 
@@ -387,7 +394,7 @@ class VisionTactileSensorUIPC:
         '''生成标记格点'''
         def rand_between(a, b, size=None)->float:
             '''在 [a, b] 范围内生成一个随机数'''
-            return (b - a) * np.random.random(size) + a
+            return (b - a) * self._marker_rng.random(size) + a
 
         # 间隔
         marker_interval_x, marker_interval_y = self.marker_interval
@@ -423,7 +430,7 @@ class VisionTactileSensorUIPC:
             for i in range(marker_rotated_xy.shape[0]):
                 x, y = marker_rotated_xy[i]
                 theta = np.linspace(0, 2 * np.pi, sub_marker_num, endpoint=False)
-                np.random.shuffle(theta)
+                self._marker_rng.shuffle(theta)
                 start = i*sub_marker_num
                 sub_marker[start:start+sub_marker_num, 0] = x + self.marker_radius/2000 * np.cos(theta)
                 sub_marker[start:start+sub_marker_num, 1] = y + self.marker_radius/2000 * np.sin(theta)
@@ -519,15 +526,15 @@ class VisionTactileSensorUIPC:
         marker_flow = marker_flow[:, marker_mask]
 
         # post processing
-        no_lose_tracking_mask = np.random.rand(marker_flow.shape[1]) > self.marker_lose_tracking_probability
+        no_lose_tracking_mask = self._marker_rng.random(marker_flow.shape[1]) > self.marker_lose_tracking_probability
         marker_flow = marker_flow[:, no_lose_tracking_mask, :]
-        noise = np.random.randn(*marker_flow.shape) * self.marker_random_noise
+        noise = self._marker_rng.standard_normal(marker_flow.shape) * self.marker_random_noise
         marker_flow += noise
 
         original_point_num = marker_flow.shape[1]
 
         if original_point_num >= self.num_markers:
-            chosen = np.random.choice(original_point_num, self.num_markers, replace=False)
+            chosen = self._marker_rng.choice(original_point_num, self.num_markers, replace=False)
             ret = marker_flow[:, chosen, ...]
         else:
             ret = np.zeros((marker_flow.shape[0], self.num_markers, marker_flow.shape[-1]))
@@ -542,6 +549,10 @@ class VisionTactileSensorUIPC:
         ret = torch.tensor(ret, device="cuda:0")
         self.curr_marker_uv = curr_marker_uv
         return ret
+
+    def reset_random_state(self):
+        """Reset marker sampling to the start of the sensor episode."""
+        self._marker_rng = np.random.default_rng(self.marker_random_seed)
 
     def get_marker_img(self):
         curr_marker_uv = self.curr_marker_uv

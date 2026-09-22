@@ -1,0 +1,42 @@
+{
+  "schema_version": "evotac.phase6_ablation.v2",
+  "split": "test",
+  "train_seeds": [0, 1, 2],
+  "parent_scene_count_per_method": 100,
+  "parent_scene_count_scope": "per_condition",
+  "budget_physics_steps": 1200,
+  "common_failure_set": {
+    "source": "independent_final_test_parents_failed_by_frozen_base_policy",
+    "conditions": ["nominal", "lateral_offset", "angle_offset", "grasp_offset"],
+    "replay_match_required": true
+  },
+  "condition_codes": {
+    "nominal": "nominal",
+    "lateral_offset": "C1",
+    "angle_offset": "C2",
+    "grasp_offset": "C3"
+  },
+  "experiments": {
+    "tactile_recovery": ["vision_act", "tactile_residual_sac", "evotac", "evotac_no_tactile"],
+    "effect_organization": ["evotac", "no_metric_loss", "no_effect_retrieval", "no_metric_no_retrieval", "direct_effect_vector_retrieval"],
+    "continual_adaptation": ["frozen", "selector_only", "fixed_capacity_finetune", "limited_skill_extension"]
+  },
+  "required_metrics": [
+    "overall_success_rate", "common_failure_recovery_rate", "violation_rate",
+    "mean_physics_steps", "wall_seconds", "skill_count", "effect_brier_score",
+    "distance_to_skill_oracle", "old_condition_retention", "adaptation_curve_auc"
+  ],
+  "acceptance": {
+    "min_new_gain_lower_bound": 0.0,
+    "max_old_drop_lower_bound": -0.05,
+    "max_violation_increase_upper_bound": 0.02,
+    "confidence": 0.95
+  },
+  "rules": {
+    "paired_parent_required": true,
+    "final_test_updates_disabled": true,
+    "infrastructure_failures_separate": true,
+    "unmatched_replay_excluded_from_effect_labels": true,
+    "auto_accept": false
+  }
+}

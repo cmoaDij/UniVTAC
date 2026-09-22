@@ -31,6 +31,10 @@ bash scripts/install.sh
 
 See the [Installation Guide](./docs/Installation.md) for CUDA/compiler prerequisites and verification, and the [migration notes](./docs/isaacsim_5_1_migration.md) for the new GelSight, Actor and render-pipeline behavior.
 
+## EvoTac
+
+The isolated EvoTac implementation, stage records, real-run evidence and consolidated HTML view are under [`evotac/`](./evotac/). Open the [EvoTac summary](./evotac/docs/EvoTac_Summary.html) for the complete P0–P6 status. Its real Isaac profile refuses to launch when the selected GPU is already occupied; use `python -m evotac.scripts.profile_physics --performance-profile --dry-run` to validate the fast headless configuration before reserving a GPU. For a profiling-only logging tradeoff, add `--flush-every 16`; the frozen validation path keeps every-step flushes.
+
 ## Task Gallery
 
 UniVTAC currently includes the following manipulation tasks, all featuring tactile sensing:

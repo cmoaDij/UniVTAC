@@ -1,0 +1,11 @@
+{
+  "version": "insert_hole_dev_nominal.v1",
+  "selection": "All ten existing legacy development parents, selected before phase-2 outcomes; no split reassignment",
+  "backend": "taxim",
+  "condition": {"kind": "nominal"},
+  "seeds": [0, 18, 23, 24, 39, 47, 59, 82, 86, 90],
+  "split": "dev",
+  "inference_seed_rule": "same_as_scene_seed",
+  "max_controls": 200,
+  "replay_tolerances": "configs/replay_tolerances_v3.json"
+}

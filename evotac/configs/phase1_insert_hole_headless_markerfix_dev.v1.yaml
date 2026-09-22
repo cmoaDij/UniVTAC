@@ -1,0 +1,64 @@
+schema_version: evotac.phase1.v1
+validation_status: candidate_headless_markerfix_pending_independent_validation
+simulation:
+  physical_hz: 120
+  control_hz: 20
+  num_envs: 1
+  backend: taxim
+  sensor: gsmini
+  enable_cameras: true
+controller:
+  force: false
+  arm_stiffness: 1250000.0
+  arm_damping: 2500.0
+  action_version: world_rotvec_panda_hand.v1
+  control_point: panda_hand
+  translation_scale: [0.001, 0.001, 0.001]
+  rotation_scale: [0.01, 0.01, 0.01]
+  gripper_scale: 0.0002
+  joint_lower: [-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973]
+  joint_upper: [2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973]
+  max_joint_delta: 0.04
+  gripper_range: [0.0, 0.039]
+  ik_damping: 0.02
+  ik_min_singular_value: 0.00001
+  ik_max_translation_residual: 0.0005
+  ik_max_rotation_residual: 0.005
+observation:
+  cameras: [head, wrist]
+  tactile_sensors: [left_tactile, right_tactile]
+  tactile_fields: [rgb, rgb_marker]
+  max_frame_age_steps: 6
+  history_length: 8
+budgets:
+  reset_wall_seconds: 300.0
+  task_physics_steps: 1200
+  recovery_physics_steps: 120
+  stable_physics_steps: 12
+  stop_on_exception: true
+replay:
+  protocol_version: accepted_targets.v2_standard_init
+  tolerance_version: standard_init_headless_markerfix_dev.v1
+  tolerance_file: configs/replay_tolerances_headless_markerfix_dev.v1.json
+  error_statistic: max_absolute_and_rmse
+logging:
+  dataset_root: datasets/phase1
+  run_root: runs/phase1
+  cache_root: .cache
+  flush_every: 1
+  image_storage: lossless_gzip
+legacy_data:
+  config: configs/legacy_insert_hole.yaml
+resources:
+  contact:
+    path: ../data/contact
+    status: inventory_only_content_and_version_unverified
+    shapes: 14
+    episodes: 638
+  encoder:
+    uri: https://huggingface.co/datasets/byml/UniVTAC/resolve/main/checkpoints/encoder.pth
+    local_path: checkpoints/univtac_release/encoder.pth
+    status: not_downloaded_or_load_verified
+  policy:
+    uri: https://huggingface.co/datasets/byml/UniVTAC/tree/main/checkpoints
+    status: optional_phase2_isaac45_release_unverified_on_51

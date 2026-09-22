@@ -1,0 +1,13 @@
+schema_version: evotac.effect_selection.v1
+base_policy: ftp1_insert_hole_chunk16.yaml
+skills: [small_lift_adjust_reapproach, lateral_align, orientation_adjust]
+effect_embedding_dim: 64
+goal_feature_dim: 4
+memory_capacity: 10000
+retrieve_k: 20
+effect_version: frozen_skill_matrix.v1
+acceptance:
+  min_new_gain: 0.0
+  max_old_drop: 0.05
+  max_violation_increase: 0.02
+training_scope: frozen_skills_and_base_policy

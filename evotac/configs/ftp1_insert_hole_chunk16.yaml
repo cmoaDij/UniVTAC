@@ -1,0 +1,16 @@
+backend: ftp1
+source_root: .cache/sources/ftp1-policy
+source_revision: 89fa681d6c014cce28300946b7526db808e0b1c1
+python: .cache/venvs/ftp1/bin/python
+checkpoint: checkpoints/ftp1_univtac/FTP1_UniVTAC_insert_hole_expert_gsmall_ftp1/19999
+domain: UniVTAC_insert_hole
+model_gpu: '9'
+num_inference_steps: 10
+prompt: insert the stick to the hole.
+chunk_first_index: 1
+chunk_stride: 1
+execute_chunk_steps: 16
+startup_timeout_seconds: 600
+inference_timeout_seconds: 120
+source_timing_status: source_default_120hz_force_true_differs_from_physical_wrapper
+execution_hz: 20

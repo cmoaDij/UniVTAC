@@ -31,6 +31,8 @@ class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
 
     marker_lose_tracking_probability: float = 0.0
 
+    marker_random_seed: int = 0
+
     normalize: bool = False
 
     camera_to_surface: float = 0.0283

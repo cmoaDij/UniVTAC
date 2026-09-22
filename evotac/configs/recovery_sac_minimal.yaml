@@ -1,0 +1,12 @@
+schema_version: evotac.recovery_sac.v1
+base_policy: ftp1_insert_hole_chunk16.yaml
+encoder: frozen_univtac_tactile_v1
+observation_dim: 128
+action_dim: 7
+hidden_dim: 128
+replay_capacity: 100000
+batch_size: 32
+updates_per_interaction: 1
+device: cpu
+training_scope: single_recovery_skill_only
+real_interaction_required: true

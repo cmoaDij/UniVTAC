@@ -72,6 +72,7 @@ class ManiSkillSimulator(GelSightSimulator):
             sub_marker_num=self.cfg.sub_marker_num,
             marker_radius=self.radius,
             num_markers=self.cfg.marker_params.num_markers,
+            marker_random_seed=self.cfg.marker_random_seed,
         )
 
         self.marker_motion_sim._gen_marker_grid()
@@ -94,6 +95,7 @@ class ManiSkillSimulator(GelSightSimulator):
 
     def reset(self):
         self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
+        self.marker_motion_sim.reset_random_state()
         # self.init_marker_pos = (self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos)
 
     def _set_debug_vis_impl(self, debug_vis: bool):
@@ -367,12 +369,19 @@ class ManiSkillSimulator(GelSightSimulator):
 
         marker_image = marker_image[pad_size:-pad_size, pad_size:-pad_size]
         
-        noise_level = 80
-        noise = torch.rand_like(marker_image) * noise_level
         marker_mask = marker_image < 255
-        marker_image = torch.where(
-            marker_mask,
-            torch.clamp(marker_image + noise, 0, 255),
-            marker_image)
-        
+        # Respect the configured marker noise.  The old port hard-coded a
+        # ``torch.rand_like(...) * 80`` term here, so every observation
+        # consumed global torch RNG state even though this task config sets
+        # marker_random_noise=0.  That made marker RGB differ across replay
+        # resets and could perturb other torch consumers.  Skip the draw when
+        # noise is disabled and keep the configured behavior when enabled.
+        noise_level = float(getattr(self.cfg, "marker_random_noise", 0.0))
+        if noise_level > 0.0:
+            noise = torch.rand_like(marker_image) * noise_level
+            marker_image = torch.where(
+                marker_mask,
+                torch.clamp(marker_image + noise, 0, 255),
+                marker_image)
+
         return marker_image

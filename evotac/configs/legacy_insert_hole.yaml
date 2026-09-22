@@ -1,0 +1,17 @@
+source_root: ../data/isaac51/insert_hole
+source_version: unknown
+source_rate_hz: 60
+source_rate_confirmed: false
+source_rate_evidence: "All saved step differences are 2; current clean51 config uses 120/60 Hz. Historical frequency snapshot absent."
+source_seed_field: source_seed
+conversion_version: future_qpos_stride3.v1
+action_semantics: future_measured_qpos
+source_joint_names: [panda_joint1, panda_joint2, panda_joint3, panda_joint4, panda_joint5, panda_joint6, panda_joint7, panda_finger_joint1, panda_finger_joint2]
+joint_order_evidence: "Current Franka articulation order; historical per-file joint names absent, pending simulator compatibility check."
+joint_order_confirmed: false
+arm_joint_names: [panda_joint1, panda_joint2, panda_joint3, panda_joint4, panda_joint5, panda_joint6, panda_joint7]
+finger_joint_names: [panda_finger_joint1, panda_finger_joint2]
+camera_mapping: {head: cam_high, wrist: cam_wrist}
+target_rate_hz: 20
+split_ratios: [0.8, 0.1, 0.1]
+split_seed: 20260917
