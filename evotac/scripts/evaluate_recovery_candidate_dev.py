@@ -26,6 +26,8 @@ def main():
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--warmstart", type=Path, required=True)
     parser.add_argument("--gpu", required=True)
+    parser.add_argument("--trigger-calibration", type=Path,
+                        default=ROOT / "configs/trigger_calibration_train_v1.json")
     parser.add_argument("--protocol", type=Path, default=ROOT / "configs/recovery_dev_comparison.json")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--retry-from", type=Path,
@@ -39,7 +41,7 @@ def main():
     directory.mkdir(parents=True, exist_ok=args.resume)
     lock = (ROOT / "runs/phase1/recovery_dev_comparison.lock").open("a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    files = [args.protocol, args.checkpoint, args.warmstart,
+    files = [args.protocol, args.checkpoint, args.warmstart, args.trigger_calibration,
              ROOT / "configs/phase1_insert_hole.yaml", ROOT / "configs/ftp1_insert_hole_chunk16.yaml",
              ROOT / "configs/recovery_sac_minimal.yaml"]
     files += [p for group in ("scripts", "learning", "policy", "envs", "evaluation", "data", "perf")
@@ -106,6 +108,7 @@ def main():
                        "--model-gpu", args.gpu, "--mode", "evaluate", "--split", "dev",
                        "--seeds", str(row["seed"]), "--history-checkpoint", str(args.warmstart.resolve()),
                        "--trainer-checkpoint", str(args.checkpoint.resolve()), "--threads", "4",
+                       "--trigger-calibration", str(args.trigger_calibration.resolve()),
                        "--monitor-object-lost-risk", str(protocol["monitor_object_lost_risk"]),
                        "--max-recovery-actions", str(protocol["max_recovery_actions"]),
                        "--stable-cycles", str(protocol["stable_cycles"])]

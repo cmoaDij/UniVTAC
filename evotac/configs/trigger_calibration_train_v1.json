@@ -1,0 +1,11 @@
+{
+  "contact_threshold": 0.3015906512737274,
+  "min_budget_steps": 12,
+  "positive_count": 13,
+  "sample_count": 17,
+  "schema": "evotac.trigger_calibration.v1",
+  "source_sha256": "c93f9c0e1fc564ffd5644d84dffd97eefe715a14618c322cdd8f25465e32d652",
+  "split": "train",
+  "target_recall": 0.8,
+  "threshold": 0.3015906512737274
+}

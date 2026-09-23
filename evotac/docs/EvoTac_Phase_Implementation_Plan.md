@@ -30,7 +30,7 @@
 1. 先跑 seed 0、47、86 的边界 `0/1/4/8/12`，分别检查空载、抓取结束、接近结束、策略前缀和物体姿态、触觉形变以及 history mask。
 2. 对同一不可变 scene 在同一 GPU/代码下重复 reset + prefix，先隔离 reset、UIPC/FEM 和触觉缓存的非确定性；marker 后处理必须使用 reset 重置的本地 RNG；不放宽 v3 容差来掩盖差异。
 3. 当前 seed23 已完成 standalone strict replay 和完整 paired terminal audit；扩大前仍需先隔离 UIPC/FEM/传感器 reset 漂移。现有 4-parent/8-repeat 校准中 seed18/24 不稳定，不能把诊断容差升级成正式 cohort。
-4. P3 真实 collector 已在空闲 GPU 完成 controlled-trigger 端到端运行，scripted branch 已验证 4 个恢复控制和 handoff；已有 3 条真实 transition 和 train-split warm-start，但仍需把显式 plumbing 触发替换为校准监测器，再做标准训练。
+4. P3 真实 collector 已在空闲 GPU 完成 controlled-trigger 端到端运行，scripted branch 已验证 4 个恢复控制和 handoff；已有 3 条真实 transition 和 train-split warm-start。当前源码已加入 train-only trigger calibration artifact、哈希冻结和 dev/test fail-closed 检查；新的标准真实训练仍需等待独占 GPU。
 5. P3 冻结技能后才生成 P4 效果标签；P4 通过版本兼容和选择验收后，才进入 P5 的新条件更新。
 
 ## 性能验证轨道

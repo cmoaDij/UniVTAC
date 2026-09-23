@@ -13,7 +13,10 @@ Freeze `configs/recovery_dev_comparison.json` before the first attempt:
 - Warmstart: FTP-1 plus the train-only warmstart recovery actor, before online
   SAC updates.
 - Trained: FTP-1 plus the same recovery actor after the existing real training.
-- All arms share threshold 0.3, maximum 12 recovery actions, three stable cycles
+- All arms share the frozen train-fitted trigger calibration in
+  `configs/trigger_calibration_train_v1.json` (threshold 0.3015906513), maximum
+  12 recovery actions, and three stable cycles. The old 0.3 comparison remains
+  historical evidence and is not silently relabeled.
   before handoff, 1200 task physics steps, and the original sensor/controller
   configuration. Baselines compute features through the same evaluation loop.
 

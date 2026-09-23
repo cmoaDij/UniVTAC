@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+import hashlib
 from pathlib import Path
 
 import torch
@@ -47,6 +48,11 @@ def build_candidate(trained_checkpoint: Path, warmstart_checkpoint: Path,
         raise ValueError("warm-start checkpoint is not a control warm-start")
     actor = trained.get("learner", {}).get("actor")
     skill = trained.get("experiment_contract", {}).get("skill_name")
+    if not skill or skill not in warm.get("skill_names", ()):
+        raise ValueError("trained checkpoint skill is absent from warm-start contract")
+    network_config = trained.get("learner", {}).get("network_config", {})
+    if network_config.get("observation_dim") != 128 or network_config.get("action_dim") != 7:
+        raise ValueError("candidate requires the frozen 128D/7D recovery actor contract")
     warm_actor = {
         key.removeprefix(f"{skill}."): value
         for key, value in warm.get("actors", {}).items()
@@ -60,6 +66,9 @@ def build_candidate(trained_checkpoint: Path, warmstart_checkpoint: Path,
         "schema": "evotac.behavior_preserving_actor_blend.v1",
         "trained_checkpoint": str(trained_checkpoint),
         "warmstart_checkpoint": str(warmstart_checkpoint),
+        "trained_checkpoint_sha256": hashlib.sha256(trained_checkpoint.read_bytes()).hexdigest(),
+        "warmstart_checkpoint_sha256": hashlib.sha256(warmstart_checkpoint.read_bytes()).hexdigest(),
+        "actor_keys": sorted(actor),
         "trained_weight": float(trained_weight),
         "warmstart_weight": float(1.0 - trained_weight),
         "selection_scope": "train_artifacts_only",

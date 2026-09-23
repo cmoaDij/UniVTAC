@@ -27,6 +27,7 @@ from evotac.learning.recovery_experiment import (
 )
 from evotac.learning.recovery_warmstart import RecoveryWarmStart
 from evotac.learning.runtime_monitor import RecoveryMonitor
+from evotac.learning.trigger_calibration import load_calibration
 from evotac.perf.runtime_probe import gpu_preflight, gpu_snapshot
 from evotac.policy.ftp1_adapter import FTP1Policy
 from evotac.policy.ftp1_client import FTP1Client
@@ -126,6 +127,8 @@ def main():
                         help="observable trigger threshold; default proxy is uncalibrated")
     parser.add_argument("--monitor-contact-blocked", type=float, default=0.8,
                         help="observable contact trigger threshold; default proxy is uncalibrated")
+    parser.add_argument("--trigger-calibration", type=Path,
+                        help="frozen train-split trigger calibration artifact")
     parser.add_argument("--stable-cycles", type=int, default=3,
                         help="consecutive stable observations required before handoff")
     parser.add_argument("--max-recovery-actions", type=int, default=None,
@@ -160,6 +163,9 @@ def main():
     if not all(math.isfinite(value) and 0 <= value <= 1 for value in
                (args.monitor_object_lost_risk, args.monitor_contact_blocked)):
         raise ValueError("monitor thresholds must be finite and in [0, 1]")
+    calibration = load_calibration(args.trigger_calibration, expected_split=args.split) if args.trigger_calibration else None
+    if args.mode == "evaluate" and args.split in {"dev", "test"} and calibration is None:
+        raise ValueError("dev/test evaluation requires --trigger-calibration fitted on train")
     if args.batch_size is not None and (type(args.batch_size) is not int or args.batch_size < 1):
         raise ValueError("batch-size must be a positive integer")
     if args.updates_per_interaction is not None and (type(args.updates_per_interaction) is not int or args.updates_per_interaction < 1):
@@ -167,8 +173,12 @@ def main():
     policy_config = yaml.safe_load(args.policy_config.read_text())
     recovery_config = yaml.safe_load(args.recovery_config.read_text())
     controls = {
-        "monitor_object_lost_risk": args.monitor_object_lost_risk,
-        "monitor_contact_blocked": args.monitor_contact_blocked,
+        "monitor_object_lost_risk": calibration.threshold if calibration else args.monitor_object_lost_risk,
+        "monitor_contact_blocked": calibration.contact_threshold if calibration else args.monitor_contact_blocked,
+        "requested_monitor_object_lost_risk": args.monitor_object_lost_risk,
+        "requested_monitor_contact_blocked": args.monitor_contact_blocked,
+        "trigger_calibration": str(args.trigger_calibration.resolve()) if args.trigger_calibration else None,
+        "trigger_calibration_sha256": sha256(args.trigger_calibration) if args.trigger_calibration else None,
         "stable_cycles": args.stable_cycles,
         "max_recovery_actions": int(args.max_recovery_actions or 0),
         "batch_size": int(args.batch_size or recovery_config["batch_size"]),
@@ -276,7 +286,8 @@ def main():
             base_policy_impl.switch_control()
 
         monitor = RecoveryMonitor(object_lost_risk=args.monitor_object_lost_risk,
-                                  contact_blocked=args.monitor_contact_blocked)
+                                  contact_blocked=args.monitor_contact_blocked,
+                                  calibration=calibration)
         max_recovery_actions = int(args.max_recovery_actions or
                                    (config["budgets"]["recovery_physics_steps"] // 6))
         if args.max_recovery_actions is not None and max_recovery_actions * 6 >= config["budgets"]["recovery_physics_steps"]:
@@ -308,6 +319,7 @@ def main():
                 "sha256": sha256(args.trainer_checkpoint),
             }
         checks["evidence_scope"] = "frozen_evaluation" if args.mode == "evaluate" else "online_training_development"
+        checks["trigger_provenance"] = monitor.provenance()
         checks["training_evidence"] = evidence
         for offset, episode_seed in enumerate(seeds):
             # A reset starts a fresh control episode; no pending FTP-1 chunk

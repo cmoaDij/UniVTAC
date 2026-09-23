@@ -63,6 +63,7 @@ def checkpoint_contract(warmstart, skill_name, controls):
     return {'warmstart_sha256': sha256(warmstart), 'skill_name': skill_name,
             'monitor_object_lost_risk': controls['monitor_object_lost_risk'],
             'monitor_contact_blocked': controls['monitor_contact_blocked'],
+            'trigger_calibration_sha256': controls.get('trigger_calibration_sha256'),
             'stable_cycles': controls['stable_cycles'],
             'max_recovery_actions': int(controls.get('max_recovery_actions', 0))}
 
