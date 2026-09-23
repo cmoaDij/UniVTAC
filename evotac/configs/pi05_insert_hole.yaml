@@ -1,0 +1,17 @@
+backend: pi05
+python: .cache/venvs/pi05/bin/python
+checkpoint: checkpoints/pi05_base_b211f3d
+stats: datasets/pi05_insert_hole_train_20260924_c/stats.json
+domain: UniVTAC_insert_hole
+model_gpu: GPU-d86528b1-67d4-d67f-db2c-ccae580a1267
+num_inference_steps: 10
+prompt: insert the stick to the hole.
+action_representation: absolute
+chunk_first_index: 0
+chunk_stride: 1
+execute_chunk_steps: 16
+startup_timeout_seconds: 600
+inference_timeout_seconds: 120
+use_tactile: false
+state_dim: 8
+action_dim: 8

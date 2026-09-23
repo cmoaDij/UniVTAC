@@ -36,7 +36,23 @@ def gpu_snapshot():
                          "memory_total_mib": int(float(row[4].strip()))})
         except ValueError:
             continue
-    return {"available": bool(rows), "captured_at_unix": time.time(), "gpus": rows}
+    compute_apps = []
+    try:
+        apps = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,process_name,used_memory",
+             "--format=csv,noheader,nounits"], check=True, capture_output=True,
+            text=True, timeout=5)
+        for row in csv.reader(io.StringIO(apps.stdout)):
+            if len(row) == 4:
+                compute_apps.append({"uuid": row[0].strip(), "pid": int(row[1].strip()),
+                                     "process_name": row[2].strip(),
+                                     "memory_used_mib": int(float(row[3].strip()))})
+    except (OSError, ValueError, subprocess.SubprocessError):
+        # Telemetry failure is retained; the memory/utilization checks below
+        # remain useful, while an absent list is never called exclusive.
+        compute_apps = None
+    return {"available": bool(rows), "captured_at_unix": time.time(), "gpus": rows,
+            "compute_apps": compute_apps}
 
 
 def gpu_preflight(snapshot, *, device="cuda:0", min_free_mib=20000, visible_devices=None):
@@ -79,9 +95,17 @@ def gpu_preflight(snapshot, *, device="cuda:0", min_free_mib=20000, visible_devi
     if not rows:
         return {"ok": False, "reason": "device_not_found", "device": index}
     row = rows[0]
+    free = int(row["memory_total_mib"] - row["memory_used_mib"])
+    compute_apps = snapshot.get("compute_apps", [])
+    if compute_apps is None:
+        return {"ok": False, "reason": "compute_process_telemetry_unavailable", "device": index,
+                "free_mib": free}
+    if any(app.get("uuid") == row.get("uuid") for app in compute_apps):
+        return {"ok": False, "reason": "device_not_exclusive", "device": index,
+                "free_mib": free,
+                "compute_apps": [app for app in compute_apps if app.get("uuid") == row.get("uuid")]}
     if row["utilization_gpu_percent"] is None:
         return {"ok": False, "reason": "gpu_telemetry_unavailable", "device": index}
-    free = int(row["memory_total_mib"] - row["memory_used_mib"])
     return {"ok": free >= min_free_mib, "reason": "enough_free_memory" if free >= min_free_mib else "insufficient_free_memory",
             "device": index, "free_mib": free, "required_free_mib": min_free_mib,
             "utilization_gpu_percent": row["utilization_gpu_percent"]}

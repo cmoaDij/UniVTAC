@@ -27,3 +27,12 @@ def test_gpu_preflight_maps_cuda_visible_devices():
                                                 "utilization_gpu_percent": 1.0}]}
     result = gpu_preflight(snapshot, device="cuda:0", visible_devices="8", min_free_mib=800)
     assert result["ok"] and result["device"] == 8
+
+
+def test_gpu_preflight_refuses_compute_app_even_with_free_memory():
+    snapshot = {"available": True, "gpus": [{"index": 8, "uuid": "GPU-x",
+                "memory_used_mib": 100, "memory_total_mib": 1000,
+                "utilization_gpu_percent": 1.0}],
+                "compute_apps": [{"uuid": "GPU-x", "pid": 123, "process_name": "other", "memory_used_mib": 100}]}
+    result = gpu_preflight(snapshot, device="cuda:0", visible_devices="GPU-x", min_free_mib=800)
+    assert not result["ok"] and result["reason"] == "device_not_exclusive"

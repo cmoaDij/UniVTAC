@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8"><title>EvoTac validation 2026-09-24</title>
+<h1>EvoTac validation report — 2026-09-24</h1>
+<p><strong>Scope:</strong> π0.5 tactile-free baseline transition and validation plumbing. Existing runs and checkpoints were preserved; no independent test was launched.</p>
+<h2>Current decision</h2>
+<p>The existing 40 Isaac/TacEx dev outcomes remain exploratory: baseline_a 5/10, baseline_b 5/10, warmstart 5/10, trained 2/10; trained recovery 0/7. These results do not establish algorithmic success or failure. The strict shared-state/continuous-rollout audit remains failed, so the causal test gate remains closed.</p>
+<h2>π0.5 baseline definition</h2>
+<p>FTP-1 is the tactile expert used in historical comparisons; its released policy consumes tactile streams. It is not a fair tactile-free base policy. This transition uses the released <code>lerobot/pi05_base</code> checkpoint at revision <code>b211f3d44c36b6acfcf7ae94a64e8e96f75a64ba</code> and exposes only head RGB, wrist RGB, language, and 8-D proprioception. The student targets are accepted joint targets distilled from train rollouts whose teachers may be FTP-1, SAC, or scripted recovery; that teacher provenance is recorded and is not described as a vision-only demonstration source.</p>
+<h2>Completed software and data work</h2>
+<ul>
+<li><code>policy/pi05_adapter.py</code> has an explicit RGB/state contract, aspect-preserving 224-pixel preprocessing, relative/absolute action decoding, and no tactile input.</li>
+<li><code>scripts/pi05_worker.py</code> refuses missing or tiny weights and loads safetensors strictly; the LeRobot fallback that could return random weights is not used.</li>
+<li><code>scripts/export_pi05_dataset.py</code> audits train split parents, 120/20-Hz alignment, joint order/units, accepted target provenance, camera freshness, and source hashes. It never reads the tactile subtree. Statistics are computed from train only.</li>
+<li>Export completed as <code>datasets/pi05_insert_hole_train_20260924_c</code>: 44 unique train parents, 7,082 aligned frames, 136 excluded duplicate/ineligible records, and a train-only <code>stats.json</code>. This generated dataset remains untracked.</li>
+<li>Added no-tactile invariance and action-contract tests. The relevant test subset currently passes.</li>
+<li>Snapshot gate changes require a completed strict dev/acceptance audit, matching frozen protocol and checkpoint hashes, and disjoint test parents. Test launch remains fail-closed.</li>
+</ul>
+<h2>Execution evidence</h2>
+<pre>cat AGENTS.md
+git status --short --branch
+git log -3 --oneline --decorate
+nvidia-smi
+/data/ZED/conda/envs/UniVTAC/bin/python -m compileall -q evotac/policy evotac/scripts evotac/evaluation evotac/learning
+/data/ZED/conda/envs/UniVTAC/bin/python -m pytest -q evotac/tests/test_pi05_adapter.py evotac/tests/test_pi05_dataset_plan.py evotac/tests/test_snapshot_audit.py</pre>
+<p>Result: compileall passed; 8 focused tests pass after the tactile-invariance addition. The isolated π0.5 environment was installed under <code>evotac/.cache/venvs/pi05</code>; the main UniVTAC environment was not modified.</p>
+<h2>Blocked real validation</h2>
+<p>At the last GPU check, the authorized GPU UUID <code>GPU-d86528b1-67d4-d67f-db2c-ccae580a1267</code> was current index 8 but had an unrelated Isaac task (PID 1703728), so the new exclusivity preflight returned <code>device_not_exclusive</code>. No training or Isaac/TacEx process was started, and no user process was stopped. The base safetensors download was still incomplete. A public SentencePiece tokenizer asset was downloaded from <a href="https://huggingface.co/RLinf/openpi_tokenizer">RLinf/openpi_tokenizer</a> to avoid the gated HF tokenizer dependency; model weights remain required before a load smoke test.</p>
+<h2>Facts and project inferences</h2>
+<ul>
+<li>π0.5 is documented as a vision-language-action flow model with base checkpoints intended for fine-tuning; the official OpenPI repository reports &gt;8 GB inference memory and &gt;70 GB for full fine-tuning, with LoRA above 22.5 GB. <a href="https://github.com/Physical-Intelligence/openpi">OpenPI</a></li>
+<li>FTP-1 is a generalist tactile foundation policy whose stated inputs include heterogeneous tactile signals. <a href="https://arxiv.org/abs/2606.13102">FTP-1 paper</a></li>
+<li>Demonstration-guided learning is a standard response to sparse-reward exploration difficulty. <a href="https://arxiv.org/abs/1709.10089">Nair et al.</a></li>
+<li>For this project, the sparse positive recovery count, actor drift, and failed handoff are hypotheses requiring controlled experiments; none is proof of causation.</li>
+</ul>
+<h2>Next executable gate</h2>
+<p>Wait for an independently idle GPU UUID, finish and hash the pinned checkpoint and tokenizer assets, run a strict model-load smoke test, then train π0.5 on the train-only export with a new run-id. Evaluate only dev parents first. Do not run independent test unless a new strict shared-state snapshot audit passes with the exact frozen protocol.</p>

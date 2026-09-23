@@ -28,7 +28,7 @@ from evotac.learning.recovery_experiment import (
 from evotac.learning.recovery_warmstart import RecoveryWarmStart
 from evotac.learning.runtime_monitor import RecoveryMonitor
 from evotac.learning.trigger_calibration import load_calibration
-from evotac.evaluation.snapshot_audit import load_test_gate
+from evotac.evaluation.snapshot_audit import load_test_gate, frozen_protocol
 from evotac.perf.runtime_probe import gpu_preflight, gpu_snapshot
 from evotac.policy.ftp1_adapter import FTP1Policy
 from evotac.policy.ftp1_client import FTP1Client
@@ -167,18 +167,8 @@ def main():
                (args.monitor_object_lost_risk, args.monitor_contact_blocked)):
         raise ValueError("monitor thresholds must be finite and in [0, 1]")
     calibration = load_calibration(args.trigger_calibration, expected_split=args.split) if args.trigger_calibration else None
-    if args.mode == "evaluate" and args.split in {"dev", "test"} and calibration is None:
+    if args.mode == "evaluate" and set(assigned_splits) & {"dev", "test"} and calibration is None:
         raise ValueError("dev/test evaluation requires --trigger-calibration fitted on train")
-    causal_gate = None
-    if args.mode == "evaluate" and args.split == "test":
-        if args.causal_audit is None:
-            raise ValueError("test evaluation requires --causal-audit from a strict dev/acceptance audit")
-        if args.trainer_checkpoint is None or args.history_checkpoint is None:
-            raise ValueError("test evaluation requires frozen trainer and warm-start checkpoints")
-        causal_gate = load_test_gate(
-            args.causal_audit, seed=seeds[0],
-            warmstart_sha256=sha256(args.history_checkpoint),
-            checkpoint_sha256=sha256(args.trainer_checkpoint))
     if args.batch_size is not None and (type(args.batch_size) is not int or args.batch_size < 1):
         raise ValueError("batch-size must be a positive integer")
     if args.updates_per_interaction is not None and (type(args.updates_per_interaction) is not int or args.updates_per_interaction < 1):
@@ -192,7 +182,6 @@ def main():
         "requested_monitor_contact_blocked": args.monitor_contact_blocked,
         "trigger_calibration": str(args.trigger_calibration.resolve()) if args.trigger_calibration else None,
         "trigger_calibration_sha256": sha256(args.trigger_calibration) if args.trigger_calibration else None,
-        "causal_audit_gate": causal_gate,
         "stable_cycles": args.stable_cycles,
         "max_recovery_actions": int(args.max_recovery_actions or 0),
         "batch_size": int(args.batch_size or recovery_config["batch_size"]),
@@ -210,6 +199,28 @@ def main():
                                          or args.batch_size is not None
                                          or args.updates_per_interaction is not None)),
     }
+    # Fingerprint the effective protocol. Seeds are disjoint statistical units,
+    # while the code, policy and controls must remain frozen across dev/test.
+    protocol_files = {"simulation_config": args.config, "policy_config": args.policy_config,
+                      "recovery_config": args.recovery_config}
+    protocol_files.update({str(p.relative_to(ROOT)): p for p in ROOT.rglob("*.py")
+                           if p.relative_to(ROOT).parts[0] in
+                           {"scripts", "learning", "policy", "envs", "evaluation", "data", "perf"}})
+    protocol = frozen_protocol(protocol_files, {
+        key: controls[key] for key in ("monitor_object_lost_risk", "monitor_contact_blocked",
+                                      "trigger_calibration_sha256", "stable_cycles", "max_recovery_actions")})
+    causal_gate = None
+    if args.mode == "evaluate" and "test" in assigned_splits:
+        if args.causal_audit is None:
+            raise ValueError("test evaluation requires --causal-audit from a strict dev/acceptance audit")
+        if args.trainer_checkpoint is None or args.history_checkpoint is None:
+            raise ValueError("test evaluation requires frozen trainer and warm-start checkpoints")
+        causal_gate = load_test_gate(args.causal_audit,
+            warmstart_sha256=sha256(args.history_checkpoint),
+            checkpoint_sha256=sha256(args.trainer_checkpoint),
+            expected_protocol=protocol, test_seeds=seeds)
+    controls["causal_audit_gate"] = causal_gate
+    controls["frozen_protocol"] = protocol
     if int(recovery_config["observation_dim"]) != 128:
         raise ValueError("recovery configuration must use the frozen 128D history state")
     if args.dry_run:

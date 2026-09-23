@@ -97,13 +97,20 @@ def strict_paired_valid(report):
     )
 
 
-def load_test_gate(path, *, seed=None, warmstart_sha256=None,
-                   checkpoint_sha256=None):
+def frozen_protocol(files, controls):
+    """Fingerprint effective controls and files, never the evaluation parents."""
+    return {"schema": "evotac.frozen_evaluation.v1",
+            "files": {name: sha256(path) for name, path in sorted(files.items())},
+            "controls": controls}
+
+
+def load_test_gate(path, *, warmstart_sha256=None,
+                   checkpoint_sha256=None, expected_protocol=None, test_seeds=()):
     """Load a completed dev snapshot audit before any independent test launch.
 
     The gate is deliberately stricter than a report's legacy ``paired_valid``
     flag: it re-evaluates the current fail-closed predicate and checks that the
-    exact frozen actor inputs and seed requested by test were audited.  A gate
+    exact frozen actor inputs used by test were audited.  A gate
     from a test run is rejected to keep test outcomes from authorizing their
     own causal comparison.
     """
@@ -122,9 +129,13 @@ def load_test_gate(path, *, seed=None, warmstart_sha256=None,
         raise ValueError("a gate that already started test cannot authorize independent test")
     if not strict_paired_valid(report) or report.get("paired_valid") is not True:
         raise ValueError("strict snapshot audit is not valid; test remains blocked")
+    if report.get("status") != "completed":
+        raise ValueError("causal audit must be completed")
+    if expected_protocol is None or report.get("frozen_protocol") != expected_protocol:
+        raise ValueError("causal audit frozen protocol mismatch or missing protocol")
+    if report.get("seed") in test_seeds:
+        raise ValueError("test parents must be independent of dev audit parents")
     mismatches = []
-    if seed is not None and report.get("seed") != seed:
-        mismatches.append(f"seed={report.get('seed')} expected {seed}")
     if warmstart_sha256 is not None and report.get("warmstart_sha256") != warmstart_sha256:
         mismatches.append("warmstart_sha256 mismatch")
     if checkpoint_sha256 is not None and report.get("checkpoint_sha256") != checkpoint_sha256:
@@ -133,5 +144,5 @@ def load_test_gate(path, *, seed=None, warmstart_sha256=None,
         raise ValueError("causal audit gate frozen-input mismatch: " + "; ".join(mismatches))
     return {"path": str(path.resolve()), "sha256": sha256(path),
             "audit_gate": report["audit_gate"], "split": report["split"],
-            "seed": report.get("seed"), "warmstart_sha256": report.get("warmstart_sha256"),
+            "source_seed": report.get("seed"), "warmstart_sha256": report.get("warmstart_sha256"),
             "checkpoint_sha256": report.get("checkpoint_sha256")}

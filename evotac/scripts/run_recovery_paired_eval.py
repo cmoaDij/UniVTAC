@@ -15,8 +15,8 @@ from evotac.config import ROOT
 from evotac.data.rollout_logger import write_tree
 from evotac.data.schemas import Action, json_value
 from evotac.evaluation.snapshot_audit import (continuation_audit, observation_audit,
-                                              strict_paired_valid, load_test_gate)
-from evotac.learning.recovery_experiment import sha256
+                                              strict_paired_valid, load_test_gate, frozen_protocol)
+from evotac.learning.recovery_experiment import sha256, scene_splits, validate_parents
 from evotac.learning.recovery_observation import RecoveryHistory, recovery_summary
 from evotac.learning.recovery_training import RecoveryTrainingDriver
 from evotac.learning.recovery_experiment import evaluate_episode
@@ -65,14 +65,24 @@ def main():
     args = parser.parse_args()
     if args.seed < 0 or args.prefix_controls < 1 or args.post_prefix_controls < 1 or args.probe_controls < 1:
         raise ValueError("seed and control counts must be positive")
+    validate_parents([args.seed], scene_splits(args.config), "evaluate", args.split)
+    files = {"simulation_config": args.config, "policy_config": args.policy_config,
+             "recovery_config": ROOT / "configs/recovery_sac_minimal.yaml"}
+    files.update({str(p.relative_to(ROOT)): p for p in ROOT.rglob("*.py")
+                  if p.relative_to(ROOT).parts[0] in
+                  {"scripts", "learning", "policy", "envs", "evaluation", "data", "perf"}})
+    protocol = frozen_protocol(files, {k: getattr(args, k) for k in
+        ("prefix_controls", "probe_controls", "post_prefix_controls", "recovery_controls",
+         "monitor_object_lost_risk")})
     causal_gate = None
     if args.split == "test":
         if args.causal_audit is None:
             raise ValueError("test evaluation requires --causal-audit from a strict dev/acceptance audit")
         causal_gate = load_test_gate(
-            args.causal_audit, seed=args.seed,
+            args.causal_audit,
             warmstart_sha256=sha256(args.warmstart),
-            checkpoint_sha256=sha256(args.trainer_checkpoint))
+            checkpoint_sha256=sha256(args.trainer_checkpoint),
+            expected_protocol=protocol, test_seeds=[args.seed])
     config, paths, versions, launcher = launch(args)
     policy_cfg = yaml.safe_load(args.policy_config.read_text())
     policy_cfg.update(model_gpu=args.model_gpu, inference_seed=args.seed)
@@ -88,7 +98,7 @@ def main():
               "warmstart": str(args.warmstart), "trainer_checkpoint": str(args.trainer_checkpoint),
               "checkpoint_sha256": sha256(args.trainer_checkpoint),
               "warmstart_sha256": sha256(args.warmstart),
-              "causal_audit_gate": causal_gate,
+              "causal_audit_gate": causal_gate, "frozen_protocol": protocol,
               "branches": []}
     try:
         backend = FTP1Client(policy_cfg, paths["run_root"])
