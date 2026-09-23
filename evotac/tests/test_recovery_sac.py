@@ -32,6 +32,20 @@ def test_sac_action_and_one_update():
     assert update.batch_size == 8 and np.isfinite(update.critic_loss)
 
 
+def test_sac_copies_read_only_numpy_inputs():
+    learner = RecoverySAC(2, 1, hidden_dim=8, seed=2)
+    batch = {"observation": np.zeros((2, 2), np.float32),
+             "action": np.zeros((2, 1), np.float32),
+             "reward": np.zeros(2, np.float32),
+             "next_observation": np.zeros((2, 2), np.float32),
+             "terminated": np.zeros(2, np.float32),
+             "truncated": np.zeros(2, np.float32),
+             "bootstrap_allowed": np.ones(2, np.float32)}
+    for value in batch.values():
+        value.setflags(write=False)
+    assert learner.update(batch).batch_size == 2
+
+
 def test_initial_registry_and_monitor_are_explicit():
     registry = initial_recovery_registry()
     assert registry.names() == ("small_lift_adjust_reapproach",)

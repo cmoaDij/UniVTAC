@@ -96,7 +96,11 @@ class RecoverySAC:
         return self.log_alpha.exp()
 
     def _tensor(self, value):
-        return torch.as_tensor(value, dtype=torch.float32, device=self.device)
+        # HDF5-backed observations can be read-only.  Explicitly copy them so
+        # downstream tensor operations never inherit an undefined writable
+        # alias from ``torch.as_tensor``.
+        array = np.array(value, dtype=np.float32, copy=True)
+        return torch.as_tensor(array, dtype=torch.float32, device=self.device)
 
     @torch.no_grad()
     def act(self, observation, deterministic=False):
