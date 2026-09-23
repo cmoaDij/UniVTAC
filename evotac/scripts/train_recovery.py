@@ -186,11 +186,15 @@ def main():
         "split": args.split,
         "mode": args.mode, "baseline": args.baseline,
         "learning_starts": args.learning_starts, "learner_seed": args.learner_seed,
-            "plumbing_trigger_override": bool(args.monitor_object_lost_risk != 0.8
+            # Dev/test protocols intentionally freeze the action cap and
+            # stability window.  Only training-side temporary overrides are
+            # plumbing evidence; evaluation records remain comparable.
+            "plumbing_trigger_override": bool(args.mode != "evaluate" and (
+                                         args.monitor_object_lost_risk != 0.8
                                          or args.monitor_contact_blocked != 0.8
                                          or args.stable_cycles != 3 or args.max_recovery_actions is not None
                                          or args.batch_size is not None
-                                         or args.updates_per_interaction is not None),
+                                         or args.updates_per_interaction is not None)),
     }
     if int(recovery_config["observation_dim"]) != 128:
         raise ValueError("recovery configuration must use the frozen 128D history state")
