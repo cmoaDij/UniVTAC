@@ -1,4 +1,8 @@
 """Measure snapshot restoration; a shared identifier is never match evidence."""
+from pathlib import Path
+import json
+
+from evotac.learning.recovery_experiment import sha256
 from evotac.envs.state_replay import array_error, scene_digest
 
 
@@ -91,3 +95,43 @@ def strict_paired_valid(report):
         and row.get("outcome", {}).get("incomplete") is False
         for row in branches
     )
+
+
+def load_test_gate(path, *, seed=None, warmstart_sha256=None,
+                   checkpoint_sha256=None):
+    """Load a completed dev snapshot audit before any independent test launch.
+
+    The gate is deliberately stricter than a report's legacy ``paired_valid``
+    flag: it re-evaluates the current fail-closed predicate and checks that the
+    exact frozen actor inputs and seed requested by test were audited.  A gate
+    from a test run is rejected to keep test outcomes from authorizing their
+    own causal comparison.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise ValueError(f"causal audit gate does not exist: {path}")
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid causal audit gate JSON: {path}") from exc
+    if report.get("audit_gate") != "strict_visible_and_hidden_state.v2":
+        raise ValueError("causal audit gate schema is not strict_visible_and_hidden_state.v2")
+    if report.get("split") not in {"dev", "acceptance"}:
+        raise ValueError("independent test requires a strict gate produced on dev/acceptance")
+    if report.get("test_started") is True:
+        raise ValueError("a gate that already started test cannot authorize independent test")
+    if not strict_paired_valid(report) or report.get("paired_valid") is not True:
+        raise ValueError("strict snapshot audit is not valid; test remains blocked")
+    mismatches = []
+    if seed is not None and report.get("seed") != seed:
+        mismatches.append(f"seed={report.get('seed')} expected {seed}")
+    if warmstart_sha256 is not None and report.get("warmstart_sha256") != warmstart_sha256:
+        mismatches.append("warmstart_sha256 mismatch")
+    if checkpoint_sha256 is not None and report.get("checkpoint_sha256") != checkpoint_sha256:
+        mismatches.append("checkpoint_sha256 mismatch")
+    if mismatches:
+        raise ValueError("causal audit gate frozen-input mismatch: " + "; ".join(mismatches))
+    return {"path": str(path.resolve()), "sha256": sha256(path),
+            "audit_gate": report["audit_gate"], "split": report["split"],
+            "seed": report.get("seed"), "warmstart_sha256": report.get("warmstart_sha256"),
+            "checkpoint_sha256": report.get("checkpoint_sha256")}

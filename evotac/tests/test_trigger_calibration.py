@@ -23,8 +23,11 @@ def test_fit_requires_train_and_round_trips(tmp_path):
 def test_fit_rejects_dev_records_and_monitor_exposes_provenance():
     with pytest.raises(ValueError, match="train"):
         fit_trigger_calibration([{"split": "dev", "score": 0.5, "needs_recovery": True}], source_sha256=SHA)
+    with pytest.raises(ValueError, match="explicit boolean"):
+        fit_trigger_calibration([{"split": "train", "score": 0.5, "outcome": "object_lost"}], source_sha256=SHA)
     calibration = fit_trigger_calibration([
-        {"score": 0.2, "needs_recovery": False}, {"score": 0.8, "needs_recovery": True}],
+        {"split": "train", "score": 0.2, "needs_recovery": False},
+        {"split": "train", "score": 0.8, "needs_recovery": True}],
         source_sha256=SHA)
     monitor = RecoveryMonitor(calibration=calibration)
     assert monitor.calibrated is True

@@ -15,6 +15,7 @@ import numpy as np
 
 
 SCHEMA = "evotac.trigger_calibration.v1"
+LABEL_SEMANTICS = "explicit_recovery_need.v1"
 
 
 @dataclass(frozen=True)
@@ -27,11 +28,14 @@ class TriggerCalibration:
     source_sha256: str
     sample_count: int
     positive_count: int
+    label_semantics: str = LABEL_SEMANTICS
     version: str = SCHEMA
 
     def __post_init__(self):
         if self.version != SCHEMA:
             raise ValueError("unsupported trigger calibration schema")
+        if self.label_semantics != LABEL_SEMANTICS:
+            raise ValueError("trigger calibration requires explicit recovery labels")
         if self.split != "train":
             raise ValueError("trigger calibration must be fit on the train split")
         values = (self.threshold, self.contact_threshold, self.target_recall)
@@ -51,7 +55,7 @@ class TriggerCalibration:
                 "threshold": self.threshold, "contact_threshold": self.contact_threshold,
                 "min_budget_steps": self.min_budget_steps, "target_recall": self.target_recall,
                 "source_sha256": self.source_sha256, "sample_count": self.sample_count,
-                "positive_count": self.positive_count}
+                "positive_count": self.positive_count, "label_semantics": self.label_semantics}
 
 
 def _threshold_for_recall(scores, labels, target_recall):
@@ -87,21 +91,20 @@ def fit_trigger_calibration(records, *, source_sha256: str, target_recall=0.8,
         raise ValueError("target_recall must be in (0, 1]")
     scores, labels = [], []
     for row in records:
-        if row.get("split", "train") != "train":
+        if row.get("split") != "train":
             raise ValueError("calibration records must all be from train")
+        if "needs_recovery" not in row or type(row["needs_recovery"]) is not bool:
+            raise ValueError("calibration records require an explicit boolean needs_recovery label")
         score = float(row["score"])
         if not np.isfinite(score) or not 0.0 <= score <= 1.0:
             raise ValueError("calibration scores must be finite and in [0, 1]")
-        outcome = row.get("needs_recovery")
-        if outcome is None:
-            outcome = row.get("outcome") not in {"success", "nominal"}
         scores.append(score)
-        labels.append(bool(outcome))
+        labels.append(row["needs_recovery"])
     chosen = _threshold_for_recall(scores, labels, float(target_recall))
     return TriggerCalibration("train", chosen[0],
                               chosen[0] if contact_threshold is None else float(contact_threshold),
                               int(min_budget_steps), float(target_recall), source_sha256,
-                              len(records), int(np.sum(labels)))
+                              len(records), int(np.sum(labels)), LABEL_SEMANTICS)
 
 
 def save_calibration(calibration: TriggerCalibration, path):
@@ -124,6 +127,7 @@ def load_calibration(path, *, expected_split=None):
                                      source_sha256=payload["source_sha256"],
                                      sample_count=int(payload["sample_count"]),
                                      positive_count=int(payload["positive_count"]),
+                                     label_semantics=payload.get("label_semantics", ""),
                                      version=payload["schema"])
     if expected_split in {"dev", "test"} and calibration.split != "train":
         raise ValueError("dev/test evaluation must use a train-fitted trigger calibration")

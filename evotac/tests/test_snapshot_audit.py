@@ -1,8 +1,10 @@
 from copy import deepcopy
 
 import numpy as np
+import pytest
 
-from evotac.evaluation.snapshot_audit import continuation_audit, observation_audit, strict_paired_valid
+from evotac.evaluation.snapshot_audit import (continuation_audit, observation_audit,
+                                              strict_paired_valid, load_test_gate)
 
 
 def observation():
@@ -41,3 +43,12 @@ def test_render_range_is_diagnostic_and_cannot_pass_strict_gate():
     assert report["observations_match"] is False
     assert report["valid_match"] is False
     assert not strict_paired_valid({"continuation_probe": report, "branches": []})
+
+
+def test_test_gate_fails_closed_before_launch(tmp_path):
+    report = {"audit_gate": "strict_visible_and_hidden_state.v2", "split": "dev",
+              "paired_valid": False, "branches": [], "continuation_probe": {}}
+    path = tmp_path / "gate.json"
+    path.write_text(__import__("json").dumps(report))
+    with pytest.raises(ValueError, match="not valid"):
+        load_test_gate(path)

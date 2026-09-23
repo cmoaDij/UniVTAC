@@ -14,7 +14,8 @@ from evotac.evaluation.sensor_diagnostics import _sensor_diagnostics, _compare_s
 from evotac.config import ROOT
 from evotac.data.rollout_logger import write_tree
 from evotac.data.schemas import Action, json_value
-from evotac.evaluation.snapshot_audit import continuation_audit, observation_audit, strict_paired_valid
+from evotac.evaluation.snapshot_audit import (continuation_audit, observation_audit,
+                                              strict_paired_valid, load_test_gate)
 from evotac.learning.recovery_experiment import sha256
 from evotac.learning.recovery_observation import RecoveryHistory, recovery_summary
 from evotac.learning.recovery_training import RecoveryTrainingDriver
@@ -59,9 +60,19 @@ def main():
                         help="recorded for provenance; strict paired branch starts recovery explicitly")
     parser.add_argument("--warmstart", type=Path, required=True)
     parser.add_argument("--trainer-checkpoint", type=Path, required=True)
+    parser.add_argument("--causal-audit", type=Path,
+                        help="completed strict dev/acceptance audit required before test")
     args = parser.parse_args()
     if args.seed < 0 or args.prefix_controls < 1 or args.post_prefix_controls < 1 or args.probe_controls < 1:
         raise ValueError("seed and control counts must be positive")
+    causal_gate = None
+    if args.split == "test":
+        if args.causal_audit is None:
+            raise ValueError("test evaluation requires --causal-audit from a strict dev/acceptance audit")
+        causal_gate = load_test_gate(
+            args.causal_audit, seed=args.seed,
+            warmstart_sha256=sha256(args.warmstart),
+            checkpoint_sha256=sha256(args.trainer_checkpoint))
     config, paths, versions, launcher = launch(args)
     policy_cfg = yaml.safe_load(args.policy_config.read_text())
     policy_cfg.update(model_gpu=args.model_gpu, inference_seed=args.seed)
@@ -69,7 +80,7 @@ def main():
     report = {"status": "starting", "protocol": "evotac.strict_paired_prefix.v1",
               "evidence_scope": "snapshot diagnostic; causal equivalence not certified",
               "audit_gate": "strict_visible_and_hidden_state.v2",
-              "seed": args.seed, "prefix_controls": args.prefix_controls,
+              "seed": args.seed, "split": args.split, "prefix_controls": args.prefix_controls,
               "probe_controls": args.probe_controls,
               "post_prefix_controls": args.post_prefix_controls,
               "recovery_controls": args.recovery_controls,
@@ -77,6 +88,7 @@ def main():
               "warmstart": str(args.warmstart), "trainer_checkpoint": str(args.trainer_checkpoint),
               "checkpoint_sha256": sha256(args.trainer_checkpoint),
               "warmstart_sha256": sha256(args.warmstart),
+              "causal_audit_gate": causal_gate,
               "branches": []}
     try:
         backend = FTP1Client(policy_cfg, paths["run_root"])
