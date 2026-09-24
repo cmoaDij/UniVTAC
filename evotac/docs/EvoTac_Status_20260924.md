@@ -17,6 +17,8 @@
 
 GPU UUID `GPU-d86528b1-67d4-d67f-db2c-ccae580a1267` 最近一次检查无 compute app，可在启动前再次复核；但当前 PyTorch CUDA 初始化仍报 `Error 101`，需先修复运行时可见性。历史 40 次真实 dev 结果仍为 baseline_a 5/10、baseline_b 5/10、warmstart 5/10、trained 2/10；这些结果仍只是探索性信号。
 
+诊断命令：`CUDA_VISIBLE_DEVICES=8 PYTORCH_NVML_BASED_CUDA_CHECK=1 /data/ZED/UniVTAC/evotac/.cache/venvs/pi05/bin/python -m evotac.scripts.check_cuda_runtime --device cuda:0`。当前 `nvidia-smi` 可见 GPU，但 CUDA Runtime API 和 `deviceQuery` 都返回 101；这需要管理员级驱动/GSP 恢复或节点维护，不能由模型代码安全绕过。
+
 ## 下一步
 
 1. 再次执行 GPU UUID 独占预检。
